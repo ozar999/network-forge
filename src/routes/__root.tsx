@@ -15,6 +15,10 @@ export const Route = createRootRoute({
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
       { name: "twitter:site", content: "@Lovable" },
+      { name: "twitter:title", content: "NetSim — Network Simulation Platform" },
+      { name: "twitter:description", content: "Master networking with interactive labs, simulations and courses" },
+      { property: "og:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/attachments/og-images/7a1f7623-65d7-413c-b963-2fadd7e878dd" },
+      { name: "twitter:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/attachments/og-images/7a1f7623-65d7-413c-b963-2fadd7e878dd" },
     ],
     links: [
       {
