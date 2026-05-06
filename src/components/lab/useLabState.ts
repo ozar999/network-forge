@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef } from 'react';
 import type { Device, Connection, Packet, DeviceType } from './types';
-import { DEVICE_DEFAULTS } from './types';
+import { DEVICE_DEFAULTS, generateMac } from './types';
 
 let deviceCounter = 0;
 let connectionCounter = 0;
@@ -19,8 +19,19 @@ function createDevice(type: DeviceType, x: number, y: number): Device {
     interfaces: defaults.interfaces.map(iface => ({
       name: iface,
       connected: false,
+      status: 'up' as const,
+      macAddress: generateMac(),
     })),
     config: [],
+    hostname: name,
+    routingTable: [],
+    arpTable: [],
+    macTable: [],
+    dhcpPools: [],
+    services: defaults.defaultServices ? [...defaults.defaultServices] : [],
+    vlanTable: type === 'switch' ? [{ id: 1, name: 'default', status: 'active' as const }] : [],
+    dhcpEnabled: type === 'pc' || type === 'laptop',
+    ...(type === 'accesspoint' ? { ssid: `AP_${deviceCounter}`, wpaPassword: '', channel: 1, apMode: 'ap' as const } : {}),
   };
 }
 
@@ -69,6 +80,7 @@ export function useLabState() {
       to: toId,
       fromInterface: fromIface.name,
       toInterface: toIface.name,
+      type: 'wired',
     };
 
     setConnections(prev => [...prev, conn]);
