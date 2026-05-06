@@ -1,14 +1,15 @@
 import { createServerFn } from '@tanstack/react-start';
 import { streamAIChat } from './ai-chat.server';
-
-import { createServerFn } from '@tanstack/react-start';
-import { streamAIChat } from './ai-chat.server';
+import { z } from 'zod';
 
 export const chatWithAI = createServerFn({ method: 'POST' })
-  .handler(async ({ data }: { data: { messages: { role: string; content: string }[] } }) => {
-    const messages = (data as any)?.messages;
-    if (!messages) throw new Error('Messages required');
-    const response = await streamAIChat(data.messages);
+  .inputValidator(
+    (input: unknown) => z.object({
+      messages: z.array(z.object({ role: z.string(), content: z.string() })),
+    }).parse(input)
+  )
+  .handler(async ({ data }) => {
+    const response = await streamAIChat(data.messages as { role: string; content: string }[]);
     const reader = response.body?.getReader();
     if (!reader) throw new Error('No response body');
 
