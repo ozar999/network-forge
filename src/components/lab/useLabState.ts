@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef } from 'react';
-import type { Device, Connection, Packet, DeviceType } from './types';
-import { DEVICE_DEFAULTS } from './types';
+import type { Device, Connection, Packet, DeviceType, SavedLab } from './types';
+import { DEVICE_DEFAULTS, generateMac, type NetworkInterface } from './types';
 
 let deviceCounter = 0;
 let connectionCounter = 0;
@@ -19,8 +19,19 @@ function createDevice(type: DeviceType, x: number, y: number): Device {
     interfaces: defaults.interfaces.map(iface => ({
       name: iface,
       connected: false,
+      status: 'up' as const,
+      macAddress: generateMac(),
     })),
     config: [],
+    hostname: name,
+    routingTable: [],
+    arpTable: [],
+    macTable: [],
+    dhcpPools: [],
+    services: defaults.defaultServices ? [...defaults.defaultServices] : [],
+    vlanTable: type === 'switch' ? [{ id: 1, name: 'default', status: 'active' as const }] : [],
+    dhcpEnabled: type === 'pc' || type === 'laptop',
+    ...(type === 'accesspoint' ? { ssid: `AP_${deviceCounter}`, wpaPassword: '', channel: 1, apMode: 'ap' as const } : {}),
   };
 }
 
@@ -53,31 +64,41 @@ export function useLabState() {
     setDevices(prev => prev.map(d => d.id === id ? { ...d, status: d.status === 'up' ? 'down' : 'up' } : d));
   }, []);
 
-  const connectDevices = useCallback((fromId: string, toId: string) => {
+  const updateDevice = useCallback((updated: Device) => {
+    setDevices(prev => prev.map(d => d.id === updated.id ? updated : d));
+  }, []);
+
+  const connectDevices = useCallback((fromId: string, toId: string, fromIfaceName?: string, toIfaceName?: string) => {
     const fromDevice = devices.find(d => d.id === fromId);
     const toDevice = devices.find(d => d.id === toId);
     if (!fromDevice || !toDevice) return;
 
-    const fromIface = fromDevice.interfaces.find(i => !i.connected);
-    const toIface = toDevice.interfaces.find(i => !i.connected);
+    const fromIface = fromIfaceName
+      ? fromDevice.interfaces.find(i => i.name === fromIfaceName && !i.connected)
+      : fromDevice.interfaces.find(i => !i.connected);
+    const toIface = toIfaceName
+      ? toDevice.interfaces.find(i => i.name === toIfaceName && !i.connected)
+      : toDevice.interfaces.find(i => !i.connected);
     if (!fromIface || !toIface) return;
 
     connectionCounter++;
+    const isWireless = fromIface.isWireless || toIface.isWireless;
     const conn: Connection = {
       id: `conn-${connectionCounter}`,
       from: fromId,
       to: toId,
       fromInterface: fromIface.name,
       toInterface: toIface.name,
+      type: isWireless ? 'wireless' : 'wired',
     };
 
     setConnections(prev => [...prev, conn]);
     setDevices(prev => prev.map(d => {
       if (d.id === fromId) {
-        return { ...d, interfaces: d.interfaces.map(i => i.name === fromIface.name ? { ...i, connected: true, connectedTo: toId } : i) };
+        return { ...d, interfaces: d.interfaces.map(i => i.name === fromIface.name ? { ...i, connected: true, connectedTo: toId, connectedInterface: toIface.name, connectionId: conn.id } : i) };
       }
       if (d.id === toId) {
-        return { ...d, interfaces: d.interfaces.map(i => i.name === toIface.name ? { ...i, connected: true, connectedTo: fromId } : i) };
+        return { ...d, interfaces: d.interfaces.map(i => i.name === toIface.name ? { ...i, connected: true, connectedTo: fromId, connectedInterface: fromIface.name, connectionId: conn.id } : i) };
       }
       return d;
     }));
@@ -86,12 +107,16 @@ export function useLabState() {
   const startConnection = useCallback((deviceId: string) => {
     if (connectingFrom === null) {
       setConnectingFrom(deviceId);
-    } else if (connectingFrom !== deviceId) {
-      connectDevices(connectingFrom, deviceId);
-      setConnectingFrom(null);
     } else {
       setConnectingFrom(null);
     }
+  }, [connectingFrom, connectDevices]);
+
+  const completeConnection = useCallback((toId: string, fromIface?: string, toIface?: string) => {
+    if (connectingFrom && connectingFrom !== toId) {
+      connectDevices(connectingFrom, toId, fromIface, toIface);
+    }
+    setConnectingFrom(null);
   }, [connectingFrom, connectDevices]);
 
   const runPingSimulation = useCallback((fromId: string, toId: string) => {
@@ -174,18 +199,32 @@ export function useLabState() {
 
   // Save/load from localStorage
   const saveTopology = useCallback(() => {
-    const data = { devices, connections };
-    localStorage.setItem('netsim-topology', JSON.stringify(data));
+    const name = prompt('Lab name:', `Lab ${new Date().toLocaleString()}`);
+    if (!name) return;
+    const lab: SavedLab = {
+      id: `lab-${Date.now()}`,
+      name,
+      timestamp: Date.now(),
+      devices,
+      connections,
+    };
+    const existing = JSON.parse(localStorage.getItem('netsem-labs') || '[]') as SavedLab[];
+    existing.push(lab);
+    localStorage.setItem('netsem-labs', JSON.stringify(existing));
   }, [devices, connections]);
 
   const loadTopology = useCallback(() => {
-    const raw = localStorage.getItem('netsim-topology');
-    if (raw) {
-      try {
-        const data = JSON.parse(raw);
-        setDevices(data.devices || []);
-        setConnections(data.connections || []);
-      } catch {}
+    const existing = JSON.parse(localStorage.getItem('netsem-labs') || '[]') as SavedLab[];
+    if (existing.length === 0) {
+      alert('No saved labs found.');
+      return;
+    }
+    const name = prompt(`Saved labs:\n${existing.map((l, i) => `${i + 1}. ${l.name}`).join('\n')}\n\nEnter number to load:`);
+    if (!name) return;
+    const idx = parseInt(name) - 1;
+    if (idx >= 0 && idx < existing.length) {
+      setDevices(existing[idx].devices);
+      setConnections(existing[idx].connections);
     }
   }, []);
 
@@ -202,6 +241,8 @@ export function useLabState() {
     moveDevice,
     toggleDeviceStatus,
     startConnection,
+    completeConnection,
+    updateDevice,
     runPingSimulation,
     startDrag,
     onDrag,

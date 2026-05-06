@@ -94,4 +94,40 @@ export const DeviceIconMap: Record<string, React.FC<IconProps>> = {
   pc: PcIcon,
   firewall: FirewallIcon,
   server: ServerIcon,
+  laptop: LaptopIcon,
+  accesspoint: AccessPointIcon,
 };
+
+export function LaptopIcon({ className, status = 'up' }: IconProps) {
+  const color = status === 'up' ? 'var(--terminal)' : 'var(--noc-red)';
+  return (
+    <svg viewBox="0 0 64 64" className={className} fill="none">
+      <rect x="12" y="10" width="40" height="28" rx="2" stroke={color} strokeWidth="2" />
+      <rect x="16" y="14" width="32" height="20" stroke={color} strokeWidth="1" fill={color} fillOpacity="0.1" />
+      <path d="M6 42 L12 38 L52 38 L58 42 Z" stroke={color} strokeWidth="2" fill="none" />
+      <line x1="6" y1="42" x2="58" y2="42" stroke={color} strokeWidth="2" />
+      {/* WiFi indicator */}
+      <path d="M40 18 Q44 16 48 18" stroke={color} strokeWidth="1" fill="none" opacity="0.5" />
+      <path d="M42 20 Q44 19 46 20" stroke={color} strokeWidth="1" fill="none" opacity="0.5" />
+      <circle cx="44" cy="22" r="1" fill={color} fillOpacity="0.5" />
+    </svg>
+  );
+}
+
+export function AccessPointIcon({ className, status = 'up' }: IconProps) {
+  const color = status === 'up' ? 'var(--noc-cyan)' : 'var(--noc-red)';
+  return (
+    <svg viewBox="0 0 64 64" className={className} fill="none">
+      {/* Base unit */}
+      <ellipse cx="32" cy="44" rx="16" ry="6" stroke={color} strokeWidth="2" fill={color} fillOpacity="0.1" />
+      <line x1="32" y1="44" x2="32" y2="28" stroke={color} strokeWidth="2" />
+      {/* Antenna */}
+      <circle cx="32" cy="26" r="3" stroke={color} strokeWidth="2" fill={color} fillOpacity="0.3" />
+      {/* Signal waves */}
+      <path d="M20 20 Q26 10 32 20" stroke={color} strokeWidth="1.5" fill="none" opacity="0.6" />
+      <path d="M32 20 Q38 10 44 20" stroke={color} strokeWidth="1.5" fill="none" opacity="0.6" />
+      <path d="M14 24 Q22 8 32 24" stroke={color} strokeWidth="1" fill="none" opacity="0.3" />
+      <path d="M32 24 Q42 8 50 24" stroke={color} strokeWidth="1" fill="none" opacity="0.3" />
+    </svg>
+  );
+}
