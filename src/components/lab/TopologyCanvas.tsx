@@ -17,6 +17,7 @@ interface TopologyCanvasProps {
   onToggleStatus: (id: string) => void;
   onRemoveDevice: (id: string) => void;
   onPing: (fromId: string, toId: string) => void;
+  onDoubleClick?: (id: string) => void;
 }
 
 export function TopologyCanvas({
@@ -34,6 +35,7 @@ export function TopologyCanvas({
   onToggleStatus,
   onRemoveDevice,
   onPing,
+  onDoubleClick,
 }: TopologyCanvasProps) {
   const canvasRef = useRef<HTMLDivElement>(null);
   const [contextMenu, setContextMenu] = React.useState<{ x: number; y: number; deviceId: string } | null>(null);
@@ -158,6 +160,10 @@ export function TopologyCanvas({
             onClick={(e) => {
               e.stopPropagation();
               onSelectDevice(device.id);
+            }}
+            onDoubleClick={(e) => {
+              e.stopPropagation();
+              onDoubleClick?.(device.id);
             }}
             onContextMenu={(e) => handleContextMenu(e, device.id)}
           >
