@@ -456,11 +456,13 @@ export function TerminalPanel({ device, onCommand, allDevices = [], connections 
       const parts = input.trim().split(' ');
       const prefix = parts.slice(0, -1).join(' ');
       const partial = parts[parts.length - 1].toLowerCase();
-      const cmds = getCiscoCommands(device);
+      const cmds = getCiscoCommands(device, mode);
       const candidates = cmds[prefix] || cmds[''] || [];
-      const match = candidates.find(c => c.toLowerCase().startsWith(partial));
-      if (match) {
-        setInput(prefix ? `${prefix} ${match}` : match);
+      const matches = candidates.filter(c => c.toLowerCase().startsWith(partial));
+      if (matches.length === 1) {
+        setInput(prefix ? `${prefix} ${matches[0]}` : matches[0]);
+      } else if (matches.length > 1) {
+        setLines(prev => [...prev, { type: 'output', text: matches.join('  ') }]);
       }
     }
   };
