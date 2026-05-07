@@ -358,6 +358,15 @@ export function TerminalPanel({ device, onCommand, allDevices = [], connections 
       const ip = parts[1];
       if (ip) {
         const result = simulatePing(dev, ip, allDevices, connections);
+        if (onPingResult) {
+          onPingResult({
+            sourceDevice: dev.name,
+            sourceIp: dev.interfaces.find(i => i.ip)?.ip || 'N/A',
+            destIp: ip,
+            success: result.success,
+            reason: result.reason,
+          });
+        }
         return `Pinging ${ip} with 32 bytes of data:\n${result.success ? 'Reply from ' + ip + ': bytes=32 time<1ms TTL=128\nReply from ' + ip + ': bytes=32 time<1ms TTL=128\nReply from ' + ip + ': bytes=32 time<1ms TTL=128\nReply from ' + ip + ': bytes=32 time<1ms TTL=128' : 'Request timed out.\nRequest timed out.\nRequest timed out.\nRequest timed out.'}\n\nPing statistics for ${ip}:\n    Packets: Sent = 4, Received = ${result.success ? 4 : 0}, Lost = ${result.success ? 0 : 4} (${result.success ? 0 : 100}% loss)`;
       }
     }
