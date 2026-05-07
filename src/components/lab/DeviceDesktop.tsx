@@ -1,13 +1,16 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import type { Device, DeviceService, NetworkInterface } from './types';
+import type { Connection } from './types';
 
 interface DeviceDesktopProps {
   device: Device;
+  allDevices?: Device[];
+  connections?: Connection[];
   onUpdateDevice: (device: Device) => void;
   onClose: () => void;
 }
 
-export function DeviceDesktop({ device, onUpdateDevice, onClose }: DeviceDesktopProps) {
+export function DeviceDesktop({ device, allDevices = [], connections = [], onUpdateDevice, onClose }: DeviceDesktopProps) {
   const [tab, setTab] = useState<string>('network');
 
   const isPcLike = device.type === 'pc' || device.type === 'laptop';
