@@ -203,7 +203,7 @@ export function simulateTraceroute(
   return output;
 }
 
-function findPath(fromId: string, toId: string, devices: Device[], connections: Connection[]): string[] | null {
+export function findPath(fromId: string, toId: string, devices: Device[], connections: Connection[]): string[] | null {
   const visited = new Set<string>();
   const queue: string[][] = [[fromId]];
   visited.add(fromId);
