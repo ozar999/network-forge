@@ -27,6 +27,73 @@ export interface Device {
   wpaPassword?: string;
   channel?: number;
   apMode?: 'ap' | 'repeater';
+  // Firewall specific
+  nameifs?: Record<string, { name: string; securityLevel: number }>;
+  objectNetworks?: { name: string; subnet?: string; mask?: string; natRule?: string }[];
+  accessLists?: { name: string; rules: AclRule[] }[];
+  natRules?: NatRule[];
+  // Routing protocol state
+  ospfConfig?: { processId: number; networks: { network: string; wildcard: string; area: number }[]; routerId?: string };
+  ripConfig?: { version: number; networks: string[]; autoSummary: boolean };
+  eigrpConfig?: { as: number; networks: string[] };
+  bgpConfig?: { as: number; neighbors: { ip: string; remoteAs: number }[]; networks: { network: string; mask: string }[] };
+  // Security
+  passwordEncryption?: boolean;
+  aclGroups?: Record<string, { aclName: string; direction: 'in' | 'out' }>;
+  // DNS records (server)
+  dnsRecords?: DnsRecord[];
+  // Syslog entries
+  syslogEntries?: SyslogEntry[];
+  // HTTP page content
+  httpPageTitle?: string;
+  httpPageContent?: string;
+  // FTP
+  ftpUsername?: string;
+  ftpPassword?: string;
+  // AP additional
+  frequency?: '2.4GHz' | '5GHz';
+  broadcastSsid?: boolean;
+  maxClients?: number;
+  apAdminPassword?: string;
+  macFilterEnabled?: boolean;
+  macFilterList?: string[];
+  apFirewall?: boolean;
+  apDhcpEnabled?: boolean;
+  apDhcpPoolStart?: string;
+  apDhcpPoolEnd?: string;
+  apDhcpLeaseTime?: number;
+  apDhcpDns?: string;
+  apLanIp?: string;
+  apLanMask?: string;
+}
+
+export interface AclRule {
+  action: 'permit' | 'deny';
+  protocol: string;
+  source: string;
+  sourceWildcard?: string;
+  destination: string;
+  destWildcard?: string;
+}
+
+export interface NatRule {
+  type: 'inside' | 'outside';
+  accessList?: string;
+  interface?: string;
+  overload?: boolean;
+}
+
+export interface DnsRecord {
+  type: 'A' | 'CNAME';
+  hostname: string;
+  value: string;
+}
+
+export interface SyslogEntry {
+  timestamp: number;
+  device: string;
+  severity: string;
+  message: string;
 }
 
 export interface NetworkInterface {
