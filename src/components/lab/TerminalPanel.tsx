@@ -2,12 +2,15 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import type { Device } from './types';
 import { generateConnectedRoutes, simulatePing, simulateTraceroute } from './networkEngine';
 
+import type { PingResult } from './PingResultPopup';
+
 interface TerminalPanelProps {
   device: Device | null;
   onCommand: (deviceId: string, command: string) => string;
   allDevices?: Device[];
   connections?: import('./types').Connection[];
   onUpdateDevice?: (device: Device) => void;
+  onPingResult?: (result: PingResult) => void;
 }
 
 interface TerminalLine {
@@ -46,7 +49,7 @@ function getCiscoCommands(device: Device | null): Record<string, string[]> {
   };
 }
 
-export function TerminalPanel({ device, onCommand, allDevices = [], connections = [], onUpdateDevice }: TerminalPanelProps) {
+export function TerminalPanel({ device, onCommand, allDevices = [], connections = [], onUpdateDevice, onPingResult }: TerminalPanelProps) {
   const [lines, setLines] = useState<TerminalLine[]>([]);
   const [input, setInput] = useState('');
   const [history, setHistory] = useState<string[]>([]);
