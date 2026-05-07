@@ -3,6 +3,7 @@ import type { Device } from './types';
 import { generateConnectedRoutes, simulatePing, simulateTraceroute } from './networkEngine';
 
 import type { PingResult } from './PingResultPopup';
+import { processRouterCommand, getRouterPrompt, getRouterCompletions, type CliContext } from './cli/routerCommands';
 
 interface TerminalPanelProps {
   device: Device | null;
@@ -18,35 +19,24 @@ interface TerminalLine {
   text: string;
 }
 
-function getCiscoCommands(device: Device | null): Record<string, string[]> {
-  const ifaces = device?.interfaces.map(i => i.name) || [];
-  const isPcLike = device?.type === 'pc' || device?.type === 'laptop';
+function getCiscoCommands(device: Device | null, mode: string): Record<string, string[]> {
+  if (!device) return { '': ['help'] };
+  const isPcLike = device.type === 'pc' || device.type === 'laptop';
   if (isPcLike) {
     return {
-      '': ['ipconfig', 'ping', 'tracert', 'arp', 'nslookup', 'help', 'clear'],
+      '': ['ipconfig', 'ping', 'tracert', 'arp', 'nslookup', 'netstat', 'route', 'help', 'clear'],
       'ipconfig': ['/all'],
     };
   }
-  if (device?.type === 'server') {
+  if (device.type === 'server') {
     return {
       '': ['ifconfig', 'ip', 'ping', 'traceroute', 'netstat', 'service', 'help', 'clear'],
       'ip': ['addr', 'route'],
-      'service': ['dhcpd', 'httpd', 'named'],
+      'service': ['dhcpd', 'named', 'vsftpd', 'apache2'],
     };
   }
-  return {
-    '': ['enable', 'show', 'ping', 'traceroute', 'exit', 'configure', 'hostname', 'help', 'clear'],
-    'show': ['ip', 'interfaces', 'running-config', 'version', 'arp', 'mac-address-table', 'vlan'],
-    'show ip': ['route', 'interface', 'arp', 'protocols'],
-    'configure': ['terminal'],
-    'interface': ifaces,
-    'ip': ['address', 'route', 'dhcp'],
-    'ip dhcp': ['pool', 'excluded-address'],
-    'router': ['ospf', 'eigrp', 'bgp', 'rip'],
-    'switchport': ['mode', 'access'],
-    'switchport mode': ['access', 'trunk'],
-    'switchport access': ['vlan'],
-  };
+  if (device.type === 'accesspoint') return { '': [] };
+  return getRouterCompletions(mode, device);
 }
 
 export function TerminalPanel({ device, onCommand, allDevices = [], connections = [], onUpdateDevice, onPingResult }: TerminalPanelProps) {
