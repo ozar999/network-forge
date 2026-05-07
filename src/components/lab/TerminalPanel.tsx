@@ -212,6 +212,15 @@ export function TerminalPanel({ device, onCommand, allDevices = [], connections 
       if (device && ip) {
         const result = simulatePing(device, ip, allDevices, connections);
         output = `Type escape sequence to abort.\n${result.output}`;
+        if (onPingResult) {
+          onPingResult({
+            sourceDevice: device.name,
+            sourceIp: device.interfaces.find(i => i.ip)?.ip || 'N/A',
+            destIp: ip,
+            success: result.success,
+            reason: result.reason,
+          });
+        }
       } else {
         output = '% Incomplete command. Usage: ping <ip-address>';
       }
