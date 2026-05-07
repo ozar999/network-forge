@@ -153,6 +153,11 @@
   background-size: 40px 40px;
 }
 
+.noc-dot-grid {
+  background-image: radial-gradient(circle, var(--noc-grid) 1px, transparent 1px);
+  background-size: 30px 30px;
+}
+
 .text-glow {
   text-shadow: 0 0 8px var(--terminal), 0 0 20px oklch(0.72 0.19 145 / 30%);
 }
