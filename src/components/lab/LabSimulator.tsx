@@ -61,7 +61,7 @@ export function LabSimulator() {
       <DeviceToolbar
         onSave={lab.saveTopology}
         onLoad={lab.loadTopology}
-        onClear={() => window.location.reload()}
+        onClear={lab.clearWorkspace}
         connectingFrom={lab.connectingFrom}
       />
       <div className="flex flex-1 min-h-0">
