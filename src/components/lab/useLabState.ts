@@ -1,9 +1,12 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import type { Device, Connection, Packet, DeviceType, SavedLab } from './types';
 import { DEVICE_DEFAULTS, generateMac, type NetworkInterface } from './types';
 
 let deviceCounter = 0;
 let connectionCounter = 0;
+
+const WORKSPACE_KEY = 'netsem_workspace';
+const LABS_KEY = 'netsem-labs';
 
 function createDevice(type: DeviceType, x: number, y: number): Device {
   deviceCounter++;
@@ -35,14 +38,48 @@ function createDevice(type: DeviceType, x: number, y: number): Device {
   };
 }
 
+interface WorkspaceState {
+  devices: Device[];
+  connections: Connection[];
+  deviceCounter: number;
+  connectionCounter: number;
+}
+
+function loadWorkspace(): WorkspaceState | null {
+  try {
+    const raw = localStorage.getItem(WORKSPACE_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch {}
+  return null;
+}
+
+function saveWorkspace(devices: Device[], connections: Connection[]) {
+  try {
+    const state: WorkspaceState = { devices, connections, deviceCounter, connectionCounter };
+    localStorage.setItem(WORKSPACE_KEY, JSON.stringify(state));
+  } catch {}
+}
+
 export function useLabState() {
-  const [devices, setDevices] = useState<Device[]>([]);
-  const [connections, setConnections] = useState<Connection[]>([]);
+  const [devices, setDevices] = useState<Device[]>(() => {
+    const ws = loadWorkspace();
+    if (ws) { deviceCounter = ws.deviceCounter; connectionCounter = ws.connectionCounter; return ws.devices; }
+    return [];
+  });
+  const [connections, setConnections] = useState<Connection[]>(() => {
+    const ws = loadWorkspace();
+    return ws?.connections || [];
+  });
   const [packets, setPackets] = useState<Packet[]>([]);
   const [selectedDevice, setSelectedDevice] = useState<string | null>(null);
   const [connectingFrom, setConnectingFrom] = useState<string | null>(null);
   const [dragging, setDragging] = useState<string | null>(null);
   const dragOffset = useRef({ x: 0, y: 0 });
+
+  // Auto-save on every change
+  useEffect(() => {
+    saveWorkspace(devices, connections);
+  }, [devices, connections]);
 
   const addDevice = useCallback((type: DeviceType, x: number, y: number) => {
     const device = createDevice(type, x, y);
@@ -208,13 +245,13 @@ export function useLabState() {
       devices,
       connections,
     };
-    const existing = JSON.parse(localStorage.getItem('netsem-labs') || '[]') as SavedLab[];
+    const existing = JSON.parse(localStorage.getItem(LABS_KEY) || '[]') as SavedLab[];
     existing.push(lab);
-    localStorage.setItem('netsem-labs', JSON.stringify(existing));
+    localStorage.setItem(LABS_KEY, JSON.stringify(existing));
   }, [devices, connections]);
 
   const loadTopology = useCallback(() => {
-    const existing = JSON.parse(localStorage.getItem('netsem-labs') || '[]') as SavedLab[];
+    const existing = JSON.parse(localStorage.getItem(LABS_KEY) || '[]') as SavedLab[];
     if (existing.length === 0) {
       alert('No saved labs found.');
       return;
@@ -225,7 +262,29 @@ export function useLabState() {
     if (idx >= 0 && idx < existing.length) {
       setDevices(existing[idx].devices);
       setConnections(existing[idx].connections);
+      // Restore counters
+      const maxDevId = existing[idx].devices.reduce((m, d) => {
+        const n = parseInt(d.id.replace('device-', ''));
+        return isNaN(n) ? m : Math.max(m, n);
+      }, 0);
+      const maxConnId = existing[idx].connections.reduce((m, c) => {
+        const n = parseInt(c.id.replace('conn-', ''));
+        return isNaN(n) ? m : Math.max(m, n);
+      }, 0);
+      deviceCounter = maxDevId;
+      connectionCounter = maxConnId;
     }
+  }, []);
+
+  const clearWorkspace = useCallback(() => {
+    setDevices([]);
+    setConnections([]);
+    setPackets([]);
+    setSelectedDevice(null);
+    setConnectingFrom(null);
+    deviceCounter = 0;
+    connectionCounter = 0;
+    localStorage.removeItem(WORKSPACE_KEY);
   }, []);
 
   return {
@@ -250,5 +309,6 @@ export function useLabState() {
     handleCommand,
     saveTopology,
     loadTopology,
+    clearWorkspace,
   };
 }
