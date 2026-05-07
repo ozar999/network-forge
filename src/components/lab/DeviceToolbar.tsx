@@ -1,13 +1,15 @@
 import React from 'react';
 import type { DeviceType } from './types';
-import { RouterIcon, SwitchIcon, PcIcon, FirewallIcon, ServerIcon } from './DeviceIcons';
+import { RouterIcon, SwitchIcon, PcIcon, FirewallIcon, ServerIcon, LaptopIcon, AccessPointIcon } from './DeviceIcons';
 
 const DEVICE_LIST: { type: DeviceType; label: string; Icon: React.FC<{ className?: string }> }[] = [
   { type: 'router', label: 'Router', Icon: RouterIcon },
   { type: 'switch', label: 'Switch', Icon: SwitchIcon },
   { type: 'pc', label: 'PC', Icon: PcIcon },
+  { type: 'laptop', label: 'Laptop', Icon: LaptopIcon },
   { type: 'firewall', label: 'Firewall', Icon: FirewallIcon },
   { type: 'server', label: 'Server', Icon: ServerIcon },
+  { type: 'accesspoint', label: 'AP', Icon: AccessPointIcon },
 ];
 
 interface DeviceToolbarProps {

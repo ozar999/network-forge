@@ -6,13 +6,17 @@ import { DeviceToolbar } from './DeviceToolbar';
 import { useLabState } from './useLabState';
 import { InterfaceSelectModal } from './InterfaceSelectModal';
 import { DeviceDesktop } from './DeviceDesktop';
+import { PingResultPopup, type PingResult } from './PingResultPopup';
 import type { Device } from './types';
+import { useNavigate } from '@tanstack/react-router';
 
 export function LabSimulator() {
   const lab = useLabState();
   const selectedDev = lab.devices.find(d => d.id === lab.selectedDevice) || null;
   const [interfaceModal, setInterfaceModal] = useState<{ device: Device; step: 'from' | 'to'; fromIface?: string } | null>(null);
   const [desktopDevice, setDesktopDevice] = useState<Device | null>(null);
+  const [pingResult, setPingResult] = useState<PingResult | null>(null);
+  const navigate = useNavigate();
 
   const handleStartConnection = (deviceId: string) => {
     if (lab.connectingFrom === null) {
@@ -51,8 +55,20 @@ export function LabSimulator() {
 
   const handleDoubleClick = (deviceId: string) => {
     const device = lab.devices.find(d => d.id === deviceId);
-    if (device && (device.type === 'pc' || device.type === 'laptop' || device.type === 'server' || device.type === 'accesspoint')) {
+    if (device && device.type !== 'router' && device.type !== 'switch' && device.type !== 'firewall') {
       setDesktopDevice(device);
+    }
+  };
+
+  const handlePingResult = (result: PingResult) => {
+    setPingResult(result);
+  };
+
+  const handleAskAi = () => {
+    if (pingResult) {
+      const msg = `Ping from ${pingResult.sourceDevice} (${pingResult.sourceIp}) to ${pingResult.destIp} failed. Reason: ${pingResult.reason || 'Unknown'}. Help me fix this.`;
+      localStorage.setItem('netsem_ai_context', msg);
+      navigate({ to: '/ai-assistant' });
     }
   };
 
@@ -61,7 +77,7 @@ export function LabSimulator() {
       <DeviceToolbar
         onSave={lab.saveTopology}
         onLoad={lab.loadTopology}
-        onClear={() => window.location.reload()}
+        onClear={lab.clearWorkspace}
         connectingFrom={lab.connectingFrom}
       />
       <div className="flex flex-1 min-h-0">
@@ -93,6 +109,7 @@ export function LabSimulator() {
             allDevices={lab.devices}
             connections={lab.connections}
             onUpdateDevice={lab.updateDevice}
+            onPingResult={handlePingResult}
           />
         </div>
       </div>
@@ -109,8 +126,18 @@ export function LabSimulator() {
       {desktopDevice && (
         <DeviceDesktop
           device={desktopDevice}
+          allDevices={lab.devices}
+          connections={lab.connections}
           onUpdateDevice={(d) => { lab.updateDevice(d); setDesktopDevice(d); }}
           onClose={() => setDesktopDevice(null)}
+        />
+      )}
+
+      {pingResult && (
+        <PingResultPopup
+          result={pingResult}
+          onClose={() => setPingResult(null)}
+          onAskAi={handleAskAi}
         />
       )}
     </div>

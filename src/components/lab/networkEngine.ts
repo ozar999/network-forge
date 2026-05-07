@@ -1,4 +1,4 @@
-import type { Device, Connection, RouteEntry, ArpEntry } from './types';
+import type { Device, Connection, RouteEntry, ArpEntry, DnsRecord } from './types';
 import { ipToInt, intToIpStr, getNetworkAddress, isInSameSubnet, generateMac } from './types';
 
 export function findRoute(device: Device, destIp: string): RouteEntry | null {
@@ -41,13 +41,13 @@ export function simulatePing(
   destIp: string,
   allDevices: Device[],
   connections: Connection[],
-): { success: boolean; output: string; hops: string[] } {
+): { success: boolean; output: string; hops: string[]; reason?: string } {
   const hops: string[] = [];
 
   // Check if source has an IP
   const sourceIp = sourceDevice.interfaces.find(i => i.ip)?.ip;
   if (!sourceIp) {
-    return { success: false, output: `% Source has no IP address configured`, hops };
+    return { success: false, output: `% Source has no IP address configured`, hops, reason: 'No IP address configured on source device' };
   }
 
   // Check if pinging self
@@ -66,7 +66,44 @@ export function simulatePing(
       success: false,
       output: `Sending 5, 100-byte ICMP Echos to ${destIp}, timeout is 2 seconds:\n.....\nSuccess rate is 0 percent (0/5)`,
       hops,
+      reason: `Destination ${destIp} not found on any device in the network`,
     };
+  }
+
+  // Check if destination interface is up
+  const destIface = destDevice.interfaces.find(i => i.ip === destIp);
+  if (destIface && destIface.status === 'down') {
+    return {
+      success: false,
+      output: `Sending 5, 100-byte ICMP Echos to ${destIp}, timeout is 2 seconds:\nU.U..\nSuccess rate is 0 percent (0/5)`,
+      hops,
+      reason: `Destination interface ${destIface.name} is administratively down`,
+    };
+  }
+
+  // Check source interface status
+  const srcIface = sourceDevice.interfaces.find(i => i.ip === sourceIp);
+  if (srcIface && srcIface.status === 'down') {
+    return {
+      success: false,
+      output: `% Interface is down`,
+      hops,
+      reason: 'Source interface is administratively down',
+    };
+  }
+
+  // Check subnet logic
+  const srcMask = srcIface?.mask;
+  if (srcMask && !isInSameSubnet(sourceIp, destIp, srcMask)) {
+    // Different subnet — need gateway
+    if (!sourceDevice.defaultGateway && sourceDevice.routingTable.length === 0 && sourceDevice.type !== 'router') {
+      return {
+        success: false,
+        output: `Sending 5, 100-byte ICMP Echos to ${destIp}, timeout is 2 seconds:\n.....\nSuccess rate is 0 percent (0/5)`,
+        hops,
+        reason: `Different subnet (${getNetworkAddress(sourceIp, srcMask)} vs ${destIp}), no default gateway configured`,
+      };
+    }
   }
 
   // Check connectivity path
@@ -76,6 +113,7 @@ export function simulatePing(
       success: false,
       output: `Sending 5, 100-byte ICMP Echos to ${destIp}, timeout is 2 seconds:\n.....\nSuccess rate is 0 percent (0/5)`,
       hops,
+      reason: 'No physical path exists between source and destination (no cable connection)',
     };
   }
 
@@ -87,9 +125,48 @@ export function simulatePing(
         success: false,
         output: `Sending 5, 100-byte ICMP Echos to ${destIp}, timeout is 2 seconds:\nU.U..\nSuccess rate is 0 percent (0/5)`,
         hops,
+        reason: `Device "${dev.name}" in the path is down`,
       };
     }
   }
+
+  // VLAN isolation check for switches in path
+  const srcVlan = srcIface?.vlan || 1;
+  const destVlan = destIface?.vlan || 1;
+  // Simple VLAN check: if both are on same switch with different VLANs, fail
+  for (const devId of path) {
+    const dev = allDevices.find(d => d.id === devId);
+    if (dev?.type === 'switch') {
+      // Check if source and dest connect to this switch with different VLANs
+      const srcConn = connections.find(c =>
+        (c.from === sourceDevice.id && c.to === devId) || (c.to === sourceDevice.id && c.from === devId)
+      );
+      const dstConn = connections.find(c =>
+        (c.from === destDevice.id && c.to === devId) || (c.to === destDevice.id && c.from === devId)
+      );
+      if (srcConn && dstConn) {
+        const swSrcIface = dev.interfaces.find(i =>
+          i.name === (srcConn.from === devId ? srcConn.fromInterface : srcConn.toInterface)
+        );
+        const swDstIface = dev.interfaces.find(i =>
+          i.name === (dstConn.from === devId ? dstConn.fromInterface : dstConn.toInterface)
+        );
+        const swSrcVlan = swSrcIface?.vlan || 1;
+        const swDstVlan = swDstIface?.vlan || 1;
+        if (swSrcVlan !== swDstVlan && swSrcIface?.switchportMode !== 'trunk' && swDstIface?.switchportMode !== 'trunk') {
+          return {
+            success: false,
+            output: `Sending 5, 100-byte ICMP Echos to ${destIp}, timeout is 2 seconds:\n.....\nSuccess rate is 0 percent (0/5)`,
+            hops,
+            reason: `VLAN isolation: source is on VLAN ${swSrcVlan}, destination is on VLAN ${swDstVlan}. Inter-VLAN routing required.`,
+          };
+        }
+      }
+    }
+  }
+
+  // Populate ARP tables on success
+  // (This mutates devices in-place for simplicity, caller should update state)
 
   const rtt = Math.floor(Math.random() * 5) + 1;
   return {
@@ -126,7 +203,7 @@ export function simulateTraceroute(
   return output;
 }
 
-function findPath(fromId: string, toId: string, devices: Device[], connections: Connection[]): string[] | null {
+export function findPath(fromId: string, toId: string, devices: Device[], connections: Connection[]): string[] | null {
   const visited = new Set<string>();
   const queue: string[][] = [[fromId]];
   visited.add(fromId);
@@ -170,4 +247,71 @@ export function generateConnectedRoutes(device: Device): RouteEntry[] {
     }
   }
   return routes;
+}
+
+// DHCP simulation
+export function simulateDhcp(
+  client: Device,
+  clientIface: string,
+  allDevices: Device[],
+  connections: Connection[],
+): { success: boolean; ip?: string; mask?: string; gateway?: string; dns?: string; poolName?: string; serverName?: string } {
+  // Find DHCP servers reachable from this client
+  for (const server of allDevices) {
+    if (server.id === client.id) continue;
+    // Check if server has DHCP pools
+    const pools = server.dhcpPools.filter(p => p.network && p.mask);
+    if (pools.length === 0) continue;
+    // Check if server has DHCP service enabled (for servers) or has pools (for routers)
+    if (server.type === 'server' && !server.services.find(s => s.type === 'dhcp' && s.enabled)) continue;
+
+    // Check connectivity
+    const path = findPath(client.id, server.id, allDevices, connections);
+    if (!path) continue;
+
+    // Find a pool with available IPs
+    for (const pool of pools) {
+      const netInt = ipToInt(pool.network);
+      const maskInt = ipToInt(pool.mask);
+      const broadcast = (netInt | ~maskInt) >>> 0;
+      // Simple: assign next IP after network address
+      const usedIps = new Set(pool.leases.map(l => l.ip));
+      for (let ip = netInt + 2; ip < broadcast; ip++) {
+        const ipStr = intToIpStr(ip);
+        if (usedIps.has(ipStr)) continue;
+        if (pool.excludedAddresses.includes(ipStr)) continue;
+        // Found available IP
+        return {
+          success: true,
+          ip: ipStr,
+          mask: pool.mask,
+          gateway: pool.defaultRouter,
+          dns: pool.dnsServer,
+          poolName: pool.name,
+          serverName: server.name,
+        };
+      }
+    }
+  }
+  return { success: false };
+}
+
+// DNS resolution
+export function resolveDns(
+  hostname: string,
+  dnsServerIp: string | undefined,
+  allDevices: Device[],
+): string | null {
+  if (!dnsServerIp) return null;
+  const dnsServer = allDevices.find(d => d.interfaces.some(i => i.ip === dnsServerIp));
+  if (!dnsServer) return null;
+  if (dnsServer.type === 'server' && !dnsServer.services.find(s => s.type === 'dns' && s.enabled)) return null;
+  const records = dnsServer.dnsRecords || [];
+  const aRecord = records.find(r => r.type === 'A' && r.hostname.toLowerCase() === hostname.toLowerCase());
+  if (aRecord) return aRecord.value;
+  const cnameRecord = records.find(r => r.type === 'CNAME' && r.hostname.toLowerCase() === hostname.toLowerCase());
+  if (cnameRecord) {
+    return resolveDns(cnameRecord.value, dnsServerIp, allDevices);
+  }
+  return null;
 }
