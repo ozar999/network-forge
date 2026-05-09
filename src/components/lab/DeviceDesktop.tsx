@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import type { Device, DeviceService, NetworkInterface } from './types';
 import type { Connection } from './types';
+import { simulateDhcp, generateConnectedRoutes } from './networkEngine';
 
 interface DeviceDesktopProps {
   device: Device;
@@ -8,31 +9,41 @@ interface DeviceDesktopProps {
   connections?: Connection[];
   onUpdateDevice: (device: Device) => void;
   onClose: () => void;
+  onLaunchTerminal?: () => void;
 }
 
-export function DeviceDesktop({ device, allDevices = [], connections = [], onUpdateDevice, onClose }: DeviceDesktopProps) {
-  const [tab, setTab] = useState<string>('network');
-
+export function DeviceDesktop({ device, allDevices = [], connections = [], onUpdateDevice, onClose, onLaunchTerminal }: DeviceDesktopProps) {
   const isPcLike = device.type === 'pc' || device.type === 'laptop';
   const isServer = device.type === 'server';
   const isAP = device.type === 'accesspoint';
 
+  const defaultTab = isPcLike ? 'desktop' : isServer ? 'services' : isAP ? 'admin' : 'network';
+  const [tab, setTab] = useState<string>(defaultTab);
+
   const tabs = isPcLike
-    ? ['network', ...(device.type === 'laptop' ? ['wireless'] : []), 'terminal']
+    ? ['desktop', 'network', ...(device.type === 'laptop' ? ['wireless'] : [])]
     : isServer
-      ? ['services', 'network', 'terminal']
+      ? ['services', 'network', 'storage']
       : isAP
-        ? ['wireless', 'network']
+        ? ['admin', 'wireless', 'network']
         : ['network'];
+
+  const titleLabel = isPcLike
+    ? `${device.name} — ${device.type === 'laptop' ? 'Laptop' : 'PC'} Desktop`
+    : isServer
+      ? `${device.name} — Server Console`
+      : isAP
+        ? `${device.name} — AP Admin Panel`
+        : device.name;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
-      <div className="bg-card border border-border rounded-lg w-[560px] max-h-[80vh] shadow-2xl flex flex-col" onClick={e => e.stopPropagation()}>
+      <div className="bg-card border border-border rounded-lg w-[640px] max-h-[85vh] shadow-2xl flex flex-col" onClick={e => e.stopPropagation()}>
         {/* Title bar */}
         <div className="flex items-center justify-between px-4 py-2 border-b border-border bg-secondary/50 rounded-t-lg">
           <div className="flex items-center gap-2">
             <div className={`w-2 h-2 rounded-full ${device.status === 'up' ? 'bg-terminal' : 'bg-noc-red'}`} />
-            <span className="text-xs font-display text-terminal">{device.name}</span>
+            <span className="text-xs font-display text-terminal">{titleLabel}</span>
             <span className="text-[10px] text-muted-foreground">— {device.type.toUpperCase()}</span>
           </div>
           <button onClick={onClose} className="text-muted-foreground hover:text-foreground text-sm">✕</button>
@@ -49,14 +60,105 @@ export function DeviceDesktop({ device, allDevices = [], connections = [], onUpd
               {t}
             </button>
           ))}
+          {onLaunchTerminal && (
+            <button
+              onClick={() => { onLaunchTerminal(); onClose(); }}
+              className="ml-auto px-3 py-2 text-[10px] text-terminal hover:bg-terminal/10 border-l border-border"
+            >
+              ▶ TERMINAL
+            </button>
+          )}
         </div>
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-4">
+          {tab === 'desktop' && isPcLike && (
+            <PcDesktopTab
+              device={device}
+              allDevices={allDevices}
+              connections={connections}
+              onUpdate={onUpdateDevice}
+              onOpenTab={setTab}
+              onLaunchTerminal={onLaunchTerminal}
+            />
+          )}
           {tab === 'network' && <NetworkTab device={device} onUpdate={onUpdateDevice} />}
           {tab === 'wireless' && isAP && <APWirelessTab device={device} onUpdate={onUpdateDevice} />}
           {tab === 'wireless' && device.type === 'laptop' && <LaptopWirelessTab device={device} />}
+          {tab === 'admin' && isAP && <APAdminTab device={device} allDevices={allDevices} connections={connections} onUpdate={onUpdateDevice} />}
           {tab === 'services' && isServer && <ServicesTab device={device} onUpdate={onUpdateDevice} />}
+          {tab === 'storage' && isServer && <StorageTab device={device} onUpdate={onUpdateDevice} />}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PcDesktopTab({ device, allDevices, connections, onUpdate, onOpenTab, onLaunchTerminal }: {
+  device: Device; allDevices: Device[]; connections: Connection[];
+  onUpdate: (d: Device) => void; onOpenTab: (t: string) => void; onLaunchTerminal?: () => void;
+}) {
+  const primary = device.interfaces[0];
+  const linkUp = primary?.connected && primary?.status === 'up';
+
+  const handleDhcp = () => {
+    const result = simulateDhcp(device, primary.name, allDevices, connections);
+    if (result.success && result.ip) {
+      const newIfaces = [...device.interfaces];
+      newIfaces[0] = { ...newIfaces[0], ip: result.ip, mask: result.mask };
+      onUpdate({
+        ...device,
+        interfaces: newIfaces,
+        defaultGateway: result.gateway || device.defaultGateway,
+        dnsServer: result.dns || device.dnsServer,
+        dhcpEnabled: true,
+      });
+    } else {
+      alert('DHCP request failed: no DHCP server reachable.');
+    }
+  };
+
+  const apps = [
+    { id: 'cmd', label: 'Command Prompt', icon: '▶_', action: () => onLaunchTerminal?.() },
+    { id: 'net', label: 'Network Settings', icon: '🛰', action: () => onOpenTab('network') },
+    { id: 'browser', label: 'Web Browser', icon: '🌐', action: () => alert('Web browser is a stub: connect to a Server with HTTP enabled.') },
+    { id: 'dhcp', label: 'Request DHCP', icon: '⇅', action: handleDhcp },
+  ];
+  if (device.type === 'laptop') {
+    apps.push({ id: 'wifi', label: 'Wi-Fi', icon: '📶', action: () => onOpenTab('wireless') });
+  }
+
+  return (
+    <div className="space-y-3">
+      {/* Status banner */}
+      <div className="border border-border rounded p-3 bg-background/40">
+        <div className="text-[10px] text-muted-foreground uppercase mb-1">System Status</div>
+        <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[11px] font-mono">
+          <div className="text-muted-foreground">Hostname</div><div className="text-foreground">{device.hostname || device.name}</div>
+          <div className="text-muted-foreground">Link</div>
+          <div className={linkUp ? 'text-terminal' : 'text-noc-red'}>{linkUp ? 'Connected' : 'Disconnected'}</div>
+          <div className="text-muted-foreground">IP</div><div className="text-foreground">{primary?.ip || '— (none)'}</div>
+          <div className="text-muted-foreground">Mask</div><div className="text-foreground">{primary?.mask || '—'}</div>
+          <div className="text-muted-foreground">Gateway</div><div className="text-foreground">{device.defaultGateway || '—'}</div>
+          <div className="text-muted-foreground">DNS</div><div className="text-foreground">{device.dnsServer || '—'}</div>
+          <div className="text-muted-foreground">DHCP</div><div className="text-foreground">{device.dhcpEnabled ? 'Enabled' : 'Static'}</div>
+        </div>
+      </div>
+
+      {/* Apps grid */}
+      <div>
+        <div className="text-[10px] text-muted-foreground uppercase mb-2">Applications</div>
+        <div className="grid grid-cols-3 gap-2">
+          {apps.map(a => (
+            <button
+              key={a.id}
+              onClick={a.action}
+              className="border border-border rounded p-3 hover:border-terminal hover:bg-terminal/5 transition-colors flex flex-col items-center gap-1"
+            >
+              <span className="text-2xl">{a.icon}</span>
+              <span className="text-[10px] text-foreground">{a.label}</span>
+            </button>
+          ))}
         </div>
       </div>
     </div>
