@@ -499,9 +499,9 @@ function LaptopWirelessTab({ device, allDevices, connections, onConnectWireless,
 }
 
 function ServicesTab({ device, onUpdate }: { device: Device; onUpdate: (d: Device) => void }) {
-  const toggleService = (idx: number) => {
+  const setService = (idx: number, enabled: boolean) => {
     const newServices = [...device.services];
-    newServices[idx] = { ...newServices[idx], enabled: !newServices[idx].enabled };
+    newServices[idx] = { ...newServices[idx], enabled };
     onUpdate({ ...device, services: newServices });
   };
 
@@ -514,14 +514,24 @@ function ServicesTab({ device, onUpdate }: { device: Device; onUpdate: (d: Devic
         </span>
       </div>
       {device.services.map((svc, idx) => (
-        <ServiceCard key={svc.type} svc={svc} device={device} onToggle={() => toggleService(idx)} onUpdate={onUpdate} />
+        <ServiceCard
+          key={svc.type}
+          svc={svc}
+          device={device}
+          onStart={() => setService(idx, true)}
+          onStop={() => setService(idx, false)}
+          onRestart={() => { setService(idx, false); setTimeout(() => setService(idx, true), 150); }}
+          onUpdate={onUpdate}
+        />
       ))}
     </div>
   );
 }
 
-function ServiceCard({ svc, device, onToggle, onUpdate }: {
-  svc: DeviceService; device: Device; onToggle: () => void; onUpdate: (d: Device) => void;
+function ServiceCard({ svc, device, onStart, onStop, onRestart, onUpdate }: {
+  svc: DeviceService; device: Device;
+  onStart: () => void; onStop: () => void; onRestart: () => void;
+  onUpdate: (d: Device) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const desc: Record<string, string> = {
@@ -543,15 +553,26 @@ function ServiceCard({ svc, device, onToggle, onUpdate }: {
             <span className="text-[10px] text-muted-foreground ml-2">Port {svc.port}</span>
           </div>
         </div>
-        <div className="flex gap-2">
-          <button onClick={() => setExpanded(e => !e)} className="text-[10px] text-muted-foreground hover:text-foreground px-2">
-            {expanded ? '−' : '⚙'}
-          </button>
-          <button
-            onClick={onToggle}
-            className={`px-3 py-1 text-[10px] rounded border transition-colors ${svc.enabled ? 'border-terminal text-terminal bg-terminal/10' : 'border-border text-muted-foreground hover:text-foreground'}`}
-          >
+        <div className="flex items-center gap-1">
+          <span className={`text-[9px] px-1.5 py-0.5 rounded border ${svc.enabled ? 'border-terminal text-terminal bg-terminal/10' : 'border-border text-muted-foreground'}`}>
             {svc.enabled ? 'RUNNING' : 'STOPPED'}
+          </span>
+          <button
+            onClick={onStart}
+            disabled={svc.enabled}
+            className="px-2 py-1 text-[10px] rounded border border-terminal text-terminal hover:bg-terminal/10 disabled:opacity-30 disabled:cursor-not-allowed"
+          >Start</button>
+          <button
+            onClick={onStop}
+            disabled={!svc.enabled}
+            className="px-2 py-1 text-[10px] rounded border border-noc-red text-noc-red hover:bg-noc-red/10 disabled:opacity-30 disabled:cursor-not-allowed"
+          >Stop</button>
+          <button
+            onClick={onRestart}
+            className="px-2 py-1 text-[10px] rounded border border-border text-muted-foreground hover:text-foreground"
+          >↻</button>
+          <button onClick={() => setExpanded(e => !e)} className="text-[10px] text-muted-foreground hover:text-foreground px-1">
+            {expanded ? '−' : '⚙'}
           </button>
         </div>
       </div>
