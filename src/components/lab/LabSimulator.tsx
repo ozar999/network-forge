@@ -131,6 +131,8 @@ export function LabSimulator() {
           onUpdateDevice={(d) => { lab.updateDevice(d); setDesktopDevice(d); }}
           onClose={() => setDesktopDevice(null)}
           onLaunchTerminal={() => { lab.setSelectedDevice(desktopDevice.id); }}
+          onConnectWireless={lab.connectWireless}
+          onDisconnect={lab.removeConnection}
         />
       )}
 
