@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import type { Device, DeviceService, NetworkInterface } from './types';
 import type { Connection } from './types';
-import { simulateDhcp, generateConnectedRoutes } from './networkEngine';
+import { simulateDhcp, generateConnectedRoutes, resolveDns } from './networkEngine';
 
 interface DeviceDesktopProps {
   device: Device;
@@ -10,9 +10,11 @@ interface DeviceDesktopProps {
   onUpdateDevice: (device: Device) => void;
   onClose: () => void;
   onLaunchTerminal?: () => void;
+  onConnectWireless?: (clientId: string, apId: string) => void;
+  onDisconnect?: (connectionId: string) => void;
 }
 
-export function DeviceDesktop({ device, allDevices = [], connections = [], onUpdateDevice, onClose, onLaunchTerminal }: DeviceDesktopProps) {
+export function DeviceDesktop({ device, allDevices = [], connections = [], onUpdateDevice, onClose, onLaunchTerminal, onConnectWireless, onDisconnect }: DeviceDesktopProps) {
   const isPcLike = device.type === 'pc' || device.type === 'laptop';
   const isServer = device.type === 'server';
   const isAP = device.type === 'accesspoint';
@@ -84,7 +86,15 @@ export function DeviceDesktop({ device, allDevices = [], connections = [], onUpd
           )}
           {tab === 'network' && <NetworkTab device={device} onUpdate={onUpdateDevice} />}
           {tab === 'wireless' && isAP && <APWirelessTab device={device} onUpdate={onUpdateDevice} />}
-          {tab === 'wireless' && device.type === 'laptop' && <LaptopWirelessTab device={device} />}
+          {tab === 'wireless' && device.type === 'laptop' && (
+            <LaptopWirelessTab
+              device={device}
+              allDevices={allDevices}
+              connections={connections}
+              onConnectWireless={onConnectWireless}
+              onDisconnect={onDisconnect}
+            />
+          )}
           {tab === 'admin' && isAP && <APAdminTab device={device} allDevices={allDevices} connections={connections} onUpdate={onUpdateDevice} />}
           {tab === 'services' && isServer && <ServicesTab device={device} onUpdate={onUpdateDevice} />}
           {tab === 'storage' && isServer && <StorageTab device={device} onUpdate={onUpdateDevice} />}
@@ -100,6 +110,9 @@ function PcDesktopTab({ device, allDevices, connections, onUpdate, onOpenTab, on
 }) {
   const primary = device.interfaces[0];
   const linkUp = primary?.connected && primary?.status === 'up';
+  const [browserOpen, setBrowserOpen] = useState(false);
+  const [showDiag, setShowDiag] = useState(false);
+  const [, forceTick] = useState(0);
 
   const handleDhcp = () => {
     const result = simulateDhcp(device, primary.name, allDevices, connections);
@@ -121,12 +134,28 @@ function PcDesktopTab({ device, allDevices, connections, onUpdate, onOpenTab, on
   const apps = [
     { id: 'cmd', label: 'Command Prompt', icon: '▶_', action: () => onLaunchTerminal?.() },
     { id: 'net', label: 'Network Settings', icon: '🛰', action: () => onOpenTab('network') },
-    { id: 'browser', label: 'Web Browser', icon: '🌐', action: () => alert('Web browser is a stub: connect to a Server with HTTP enabled.') },
+    { id: 'browser', label: 'Web Browser', icon: '🌐', action: () => setBrowserOpen(true) },
     { id: 'dhcp', label: 'Request DHCP', icon: '⇅', action: handleDhcp },
+    { id: 'diag', label: 'Diagnostics', icon: '🔧', action: () => { setShowDiag(s => !s); forceTick(t => t + 1); } },
   ];
   if (device.type === 'laptop') {
     apps.push({ id: 'wifi', label: 'Wi-Fi', icon: '📶', action: () => onOpenTab('wireless') });
   }
+
+  // Active DHCP lease info — find any DHCP server pool that holds our IP, or show client-side state
+  const myIp = primary?.ip;
+  let leaseInfo: { server: string; pool: string; expiry?: number } | null = null;
+  if (myIp) {
+    for (const dev of allDevices) {
+      for (const pool of dev.dhcpPools || []) {
+        const lease = pool.leases?.find(l => l.ip === myIp);
+        if (lease) { leaseInfo = { server: dev.name, pool: pool.name, expiry: lease.expiry }; break; }
+      }
+      if (leaseInfo) break;
+    }
+  }
+
+  const routes = generateConnectedRoutes(device);
 
   return (
     <div className="space-y-3">
@@ -159,6 +188,115 @@ function PcDesktopTab({ device, allDevices, connections, onUpdate, onOpenTab, on
               <span className="text-[10px] text-foreground">{a.label}</span>
             </button>
           ))}
+        </div>
+      </div>
+
+      {showDiag && (
+        <div className="border border-border rounded p-3 space-y-2 bg-background/40">
+          <div className="flex items-center justify-between">
+            <div className="text-[10px] text-muted-foreground uppercase">Diagnostics</div>
+            <button onClick={() => forceTick(t => t + 1)} className="text-[10px] text-terminal hover:underline">↻ refresh</button>
+          </div>
+          <details open className="text-[10px] font-mono">
+            <summary className="cursor-pointer text-terminal">ipconfig /all</summary>
+            <pre className="whitespace-pre-wrap text-muted-foreground mt-1">{device.interfaces.map(i =>
+              `${i.isWireless ? 'Wireless' : 'Ethernet'} adapter ${i.name}:\n  Physical Address . : ${i.macAddress}\n  DHCP Enabled . . . : ${device.dhcpEnabled ? 'Yes' : 'No'}\n  IPv4 Address . . . : ${i.ip || '—'}\n  Subnet Mask  . . . : ${i.mask || '—'}\n  Default Gateway  . : ${device.defaultGateway || '—'}\n  DNS Server . . . . : ${device.dnsServer || '—'}`
+            ).join('\n\n')}</pre>
+          </details>
+          <details className="text-[10px] font-mono">
+            <summary className="cursor-pointer text-terminal">route print</summary>
+            <pre className="whitespace-pre-wrap text-muted-foreground mt-1">{routes.length === 0 ? 'No connected routes.' : routes.map(r => `${r.network.padEnd(18)} ${r.mask.padEnd(16)} on-link via ${r.interface}`).join('\n')}{device.defaultGateway ? `\n0.0.0.0            0.0.0.0          ${device.defaultGateway}` : ''}</pre>
+          </details>
+          <details className="text-[10px] font-mono">
+            <summary className="cursor-pointer text-terminal">DHCP lease</summary>
+            <pre className="whitespace-pre-wrap text-muted-foreground mt-1">{leaseInfo
+              ? `Server: ${leaseInfo.server}\nPool:   ${leaseInfo.pool}\nIP:     ${myIp}\nExpiry: ${leaseInfo.expiry ? new Date(leaseInfo.expiry).toLocaleString() : 'static'}`
+              : device.dhcpEnabled
+                ? 'No active lease (try Request DHCP or `ipconfig /renew`).'
+                : 'Static configuration — no DHCP lease.'}</pre>
+          </details>
+          <details className="text-[10px] font-mono">
+            <summary className="cursor-pointer text-terminal">ARP table</summary>
+            <pre className="whitespace-pre-wrap text-muted-foreground mt-1">{device.arpTable.length === 0 ? 'No ARP entries.' : device.arpTable.map(a => `${a.ip.padEnd(18)} ${a.mac}`).join('\n')}</pre>
+          </details>
+        </div>
+      )}
+
+      {browserOpen && (
+        <BrowserApp device={device} allDevices={allDevices} connections={connections} onClose={() => setBrowserOpen(false)} />
+      )}
+    </div>
+  );
+}
+
+function BrowserApp({ device, allDevices, connections, onClose }: {
+  device: Device; allDevices: Device[]; connections: Connection[]; onClose: () => void;
+}) {
+  const [url, setUrl] = useState('http://');
+  const [page, setPage] = useState<{ status: 'idle' | 'loading' | 'ok' | 'error'; title?: string; body?: string; error?: string; resolvedIp?: string }>({ status: 'idle' });
+
+  // Reachability check (lightweight — share simulatePing path lookup)
+  const tryLoad = (raw: string) => {
+    setPage({ status: 'loading' });
+    let target = raw.replace(/^https?:\/\//, '').split('/')[0].split(':')[0].trim();
+    if (!target) return setPage({ status: 'error', error: 'Invalid URL.' });
+
+    // Resolve host: IP literal or DNS lookup
+    let ip: string | null = null;
+    if (/^\d+\.\d+\.\d+\.\d+$/.test(target)) {
+      ip = target;
+    } else {
+      ip = resolveDns(target, device.dnsServer, allDevices);
+      if (!ip) return setPage({ status: 'error', error: `DNS lookup failed for "${target}". Check DNS server (${device.dnsServer || 'not configured'}).` });
+    }
+
+    const server = allDevices.find(d => d.interfaces.some(i => i.ip === ip));
+    if (!server) return setPage({ status: 'error', error: `Host ${ip} unreachable — no device has this IP.`, resolvedIp: ip });
+    if (server.status === 'down') return setPage({ status: 'error', error: `Server ${server.name} is powered off.`, resolvedIp: ip });
+    const httpSvc = server.services?.find(s => s.type === 'http');
+    if (!httpSvc || !httpSvc.enabled) return setPage({ status: 'error', error: `ERR_CONNECTION_REFUSED — HTTP service is not running on ${server.name}.`, resolvedIp: ip });
+
+    setPage({
+      status: 'ok',
+      title: server.httpPageTitle || `Welcome to ${server.name}`,
+      body: server.httpPageContent || `<h1>It works!</h1><p>This page is served by ${server.name} on ${ip}.</p>`,
+      resolvedIp: ip,
+    });
+  };
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70" onClick={onClose}>
+      <div className="bg-card border border-border rounded-lg w-[560px] max-h-[80vh] flex flex-col shadow-2xl" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center gap-2 px-3 py-2 border-b border-border bg-secondary/50 rounded-t-lg">
+          <span className="text-xs text-terminal font-display">🌐 Web Browser</span>
+          <button onClick={onClose} className="ml-auto text-muted-foreground hover:text-foreground">✕</button>
+        </div>
+        <form onSubmit={e => { e.preventDefault(); tryLoad(url); }} className="flex gap-2 p-2 border-b border-border">
+          <input
+            value={url}
+            onChange={e => setUrl(e.target.value)}
+            placeholder="http://192.168.1.10  or  http://intranet.local"
+            className="flex-1 bg-input border border-border rounded px-2 py-1 text-xs font-mono outline-none focus:border-terminal"
+          />
+          <button type="submit" className="px-3 py-1 text-[10px] border border-terminal text-terminal rounded hover:bg-terminal/10">GO</button>
+        </form>
+        <div className="flex-1 overflow-y-auto p-4 bg-background">
+          {page.status === 'idle' && <p className="text-xs text-muted-foreground italic">Enter a URL or IP to browse a server's HTTP page.</p>}
+          {page.status === 'loading' && <p className="text-xs text-muted-foreground">Loading…</p>}
+          {page.status === 'error' && (
+            <div className="text-xs">
+              <div className="text-noc-red font-display mb-1">⚠ This site can't be reached</div>
+              <p className="text-muted-foreground">{page.error}</p>
+              {page.resolvedIp && <p className="text-[10px] text-muted-foreground mt-1">Resolved: {page.resolvedIp}</p>}
+            </div>
+          )}
+          {page.status === 'ok' && (
+            <div>
+              <h2 className="text-sm text-terminal font-display mb-2">{page.title}</h2>
+              <div className="text-xs text-foreground prose prose-invert max-w-none" dangerouslySetInnerHTML={{ __html: page.body || '' }} />
+              <p className="text-[10px] text-muted-foreground mt-3 italic">Served from {page.resolvedIp}</p>
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -283,20 +421,87 @@ function APWirelessTab({ device, onUpdate }: { device: Device; onUpdate: (d: Dev
   );
 }
 
-function LaptopWirelessTab({ device }: { device: Device }) {
+function LaptopWirelessTab({ device, allDevices, connections, onConnectWireless, onDisconnect }: {
+  device: Device;
+  allDevices: Device[];
+  connections: Connection[];
+  onConnectWireless?: (clientId: string, apId: string) => void;
+  onDisconnect?: (connectionId: string) => void;
+}) {
+  const wIface = device.interfaces.find(i => i.isWireless);
+  const currentConn = connections.find(c => c.type === 'wireless' && (c.from === device.id || c.to === device.id));
+  const currentApId = currentConn ? (currentConn.from === device.id ? currentConn.to : currentConn.from) : null;
+  const currentAp = currentApId ? allDevices.find(d => d.id === currentApId) : null;
+
+  const aps = allDevices.filter(d =>
+    d.type === 'accesspoint' &&
+    d.status === 'up' &&
+    d.broadcastSsid !== false &&
+    d.id !== currentApId
+  );
+
   return (
     <div className="space-y-3">
-      <h4 className="text-xs text-terminal font-display">WIRELESS NETWORKS</h4>
-      <p className="text-[10px] text-muted-foreground">Scanning for available networks...</p>
-      <p className="text-[10px] text-muted-foreground italic">Connect to an Access Point by placing this laptop near an AP on the canvas and using the right-click menu.</p>
+      <h4 className="text-xs text-terminal font-display">WI-FI</h4>
+      {!wIface && <p className="text-[10px] text-noc-red">This device has no wireless adapter.</p>}
+
+      {currentAp && (
+        <div className="border border-terminal/40 rounded p-3 bg-terminal/5">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-xs text-terminal font-mono">📶 {currentAp.ssid || currentAp.name}</div>
+              <div className="text-[10px] text-muted-foreground">
+                Connected • Ch {currentAp.channel || 1} • {currentAp.wpaPassword ? 'WPA2' : 'OPEN'}
+              </div>
+              {wIface?.ip && <div className="text-[10px] text-muted-foreground">IP: {wIface.ip}</div>}
+            </div>
+            <button
+              onClick={() => currentConn && onDisconnect?.(currentConn.id)}
+              className="px-2 py-1 text-[10px] border border-noc-red text-noc-red rounded hover:bg-noc-red/10"
+            >
+              Disconnect
+            </button>
+          </div>
+        </div>
+      )}
+
+      <div>
+        <div className="text-[10px] text-muted-foreground uppercase mb-1">Available Networks</div>
+        {aps.length === 0 && <p className="text-[10px] text-muted-foreground italic">No SSIDs in range. Add an Access Point and power it on.</p>}
+        <ul className="space-y-1">
+          {aps.map(ap => {
+            const clientCount = connections.filter(c => c.type === 'wireless' && (c.from === ap.id || c.to === ap.id)).length;
+            return (
+              <li key={ap.id} className="flex items-center justify-between border border-border rounded p-2 hover:border-terminal/60">
+                <div>
+                  <div className="text-xs font-mono text-foreground">📶 {ap.ssid || ap.name}</div>
+                  <div className="text-[10px] text-muted-foreground">
+                    Ch {ap.channel || 1} • {ap.wpaPassword ? 'WPA2' : 'OPEN'} • {clientCount}/{ap.maxClients || 32} clients
+                  </div>
+                </div>
+                <button
+                  onClick={() => onConnectWireless?.(device.id, ap.id)}
+                  disabled={!wIface || !!currentConn}
+                  className="px-2 py-1 text-[10px] border border-terminal text-terminal rounded hover:bg-terminal/10 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  Connect
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+        {currentConn && aps.length > 0 && (
+          <p className="text-[10px] text-muted-foreground italic mt-2">Disconnect from current network to switch.</p>
+        )}
+      </div>
     </div>
   );
 }
 
 function ServicesTab({ device, onUpdate }: { device: Device; onUpdate: (d: Device) => void }) {
-  const toggleService = (idx: number) => {
+  const setService = (idx: number, enabled: boolean) => {
     const newServices = [...device.services];
-    newServices[idx] = { ...newServices[idx], enabled: !newServices[idx].enabled };
+    newServices[idx] = { ...newServices[idx], enabled };
     onUpdate({ ...device, services: newServices });
   };
 
@@ -309,14 +514,24 @@ function ServicesTab({ device, onUpdate }: { device: Device; onUpdate: (d: Devic
         </span>
       </div>
       {device.services.map((svc, idx) => (
-        <ServiceCard key={svc.type} svc={svc} device={device} onToggle={() => toggleService(idx)} onUpdate={onUpdate} />
+        <ServiceCard
+          key={svc.type}
+          svc={svc}
+          device={device}
+          onStart={() => setService(idx, true)}
+          onStop={() => setService(idx, false)}
+          onRestart={() => { setService(idx, false); setTimeout(() => setService(idx, true), 150); }}
+          onUpdate={onUpdate}
+        />
       ))}
     </div>
   );
 }
 
-function ServiceCard({ svc, device, onToggle, onUpdate }: {
-  svc: DeviceService; device: Device; onToggle: () => void; onUpdate: (d: Device) => void;
+function ServiceCard({ svc, device, onStart, onStop, onRestart, onUpdate }: {
+  svc: DeviceService; device: Device;
+  onStart: () => void; onStop: () => void; onRestart: () => void;
+  onUpdate: (d: Device) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const desc: Record<string, string> = {
@@ -338,15 +553,26 @@ function ServiceCard({ svc, device, onToggle, onUpdate }: {
             <span className="text-[10px] text-muted-foreground ml-2">Port {svc.port}</span>
           </div>
         </div>
-        <div className="flex gap-2">
-          <button onClick={() => setExpanded(e => !e)} className="text-[10px] text-muted-foreground hover:text-foreground px-2">
-            {expanded ? '−' : '⚙'}
-          </button>
-          <button
-            onClick={onToggle}
-            className={`px-3 py-1 text-[10px] rounded border transition-colors ${svc.enabled ? 'border-terminal text-terminal bg-terminal/10' : 'border-border text-muted-foreground hover:text-foreground'}`}
-          >
+        <div className="flex items-center gap-1">
+          <span className={`text-[9px] px-1.5 py-0.5 rounded border ${svc.enabled ? 'border-terminal text-terminal bg-terminal/10' : 'border-border text-muted-foreground'}`}>
             {svc.enabled ? 'RUNNING' : 'STOPPED'}
+          </span>
+          <button
+            onClick={onStart}
+            disabled={svc.enabled}
+            className="px-2 py-1 text-[10px] rounded border border-terminal text-terminal hover:bg-terminal/10 disabled:opacity-30 disabled:cursor-not-allowed"
+          >Start</button>
+          <button
+            onClick={onStop}
+            disabled={!svc.enabled}
+            className="px-2 py-1 text-[10px] rounded border border-noc-red text-noc-red hover:bg-noc-red/10 disabled:opacity-30 disabled:cursor-not-allowed"
+          >Stop</button>
+          <button
+            onClick={onRestart}
+            className="px-2 py-1 text-[10px] rounded border border-border text-muted-foreground hover:text-foreground"
+          >↻</button>
+          <button onClick={() => setExpanded(e => !e)} className="text-[10px] text-muted-foreground hover:text-foreground px-1">
+            {expanded ? '−' : '⚙'}
           </button>
         </div>
       </div>

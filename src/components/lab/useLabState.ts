@@ -24,6 +24,7 @@ function createDevice(type: DeviceType, x: number, y: number): Device {
       connected: false,
       status: 'up' as const,
       macAddress: generateMac(),
+      isWireless: /wireless/i.test(iface) || (type === 'accesspoint' && iface !== 'Ethernet0'),
     })),
     config: [],
     hostname: name,
@@ -92,6 +93,38 @@ export function useLabState() {
     setConnections(prev => prev.filter(c => c.from !== id && c.to !== id));
     if (selectedDevice === id) setSelectedDevice(null);
   }, [selectedDevice]);
+
+  const removeConnection = useCallback((connId: string) => {
+    setConnections(prev => prev.filter(c => c.id !== connId));
+    setDevices(prev => prev.map(d => ({
+      ...d,
+      interfaces: d.interfaces.map(i => i.connectionId === connId
+        ? { ...i, connected: false, connectedTo: undefined, connectedInterface: undefined, connectionId: undefined }
+        : i),
+    })));
+  }, []);
+
+  const connectWireless = useCallback((clientId: string, apId: string) => {
+    const client = devices.find(d => d.id === clientId);
+    const ap = devices.find(d => d.id === apId);
+    if (!client || !ap) return;
+    const cIface = client.interfaces.find(i => i.isWireless && !i.connected);
+    const aIface = ap.interfaces.find(i => i.name !== 'Ethernet0' && !i.connected) || ap.interfaces.find(i => i.isWireless && !i.connected);
+    if (!cIface || !aIface) return;
+    connectionCounter++;
+    const conn: Connection = {
+      id: `conn-${connectionCounter}`,
+      from: clientId, to: apId,
+      fromInterface: cIface.name, toInterface: aIface.name,
+      type: 'wireless',
+    };
+    setConnections(prev => [...prev, conn]);
+    setDevices(prev => prev.map(d => {
+      if (d.id === clientId) return { ...d, interfaces: d.interfaces.map(i => i.name === cIface.name ? { ...i, connected: true, connectedTo: apId, connectedInterface: aIface.name, connectionId: conn.id } : i) };
+      if (d.id === apId) return { ...d, interfaces: d.interfaces.map(i => i.name === aIface.name ? { ...i, connected: true, connectedTo: clientId, connectedInterface: cIface.name, connectionId: conn.id } : i) };
+      return d;
+    }));
+  }, [devices]);
 
   const moveDevice = useCallback((id: string, x: number, y: number) => {
     setDevices(prev => prev.map(d => d.id === id ? { ...d, x, y } : d));
@@ -297,6 +330,8 @@ export function useLabState() {
     setSelectedDevice,
     addDevice,
     removeDevice,
+    removeConnection,
+    connectWireless,
     moveDevice,
     toggleDeviceStatus,
     startConnection,
