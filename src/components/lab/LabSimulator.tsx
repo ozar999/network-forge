@@ -130,6 +130,7 @@ export function LabSimulator() {
           connections={lab.connections}
           onUpdateDevice={(d) => { lab.updateDevice(d); setDesktopDevice(d); }}
           onClose={() => setDesktopDevice(null)}
+          onLaunchTerminal={() => { lab.setSelectedDevice(desktopDevice.id); }}
         />
       )}
 
