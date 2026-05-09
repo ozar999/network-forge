@@ -421,12 +421,79 @@ function APWirelessTab({ device, onUpdate }: { device: Device; onUpdate: (d: Dev
   );
 }
 
-function LaptopWirelessTab({ device }: { device: Device }) {
+function LaptopWirelessTab({ device, allDevices, connections, onConnectWireless, onDisconnect }: {
+  device: Device;
+  allDevices: Device[];
+  connections: Connection[];
+  onConnectWireless?: (clientId: string, apId: string) => void;
+  onDisconnect?: (connectionId: string) => void;
+}) {
+  const wIface = device.interfaces.find(i => i.isWireless);
+  const currentConn = connections.find(c => c.type === 'wireless' && (c.from === device.id || c.to === device.id));
+  const currentApId = currentConn ? (currentConn.from === device.id ? currentConn.to : currentConn.from) : null;
+  const currentAp = currentApId ? allDevices.find(d => d.id === currentApId) : null;
+
+  const aps = allDevices.filter(d =>
+    d.type === 'accesspoint' &&
+    d.status === 'up' &&
+    d.broadcastSsid !== false &&
+    d.id !== currentApId
+  );
+
   return (
     <div className="space-y-3">
-      <h4 className="text-xs text-terminal font-display">WIRELESS NETWORKS</h4>
-      <p className="text-[10px] text-muted-foreground">Scanning for available networks...</p>
-      <p className="text-[10px] text-muted-foreground italic">Connect to an Access Point by placing this laptop near an AP on the canvas and using the right-click menu.</p>
+      <h4 className="text-xs text-terminal font-display">WI-FI</h4>
+      {!wIface && <p className="text-[10px] text-noc-red">This device has no wireless adapter.</p>}
+
+      {currentAp && (
+        <div className="border border-terminal/40 rounded p-3 bg-terminal/5">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-xs text-terminal font-mono">📶 {currentAp.ssid || currentAp.name}</div>
+              <div className="text-[10px] text-muted-foreground">
+                Connected • Ch {currentAp.channel || 1} • {currentAp.wpaPassword ? 'WPA2' : 'OPEN'}
+              </div>
+              {wIface?.ip && <div className="text-[10px] text-muted-foreground">IP: {wIface.ip}</div>}
+            </div>
+            <button
+              onClick={() => currentConn && onDisconnect?.(currentConn.id)}
+              className="px-2 py-1 text-[10px] border border-noc-red text-noc-red rounded hover:bg-noc-red/10"
+            >
+              Disconnect
+            </button>
+          </div>
+        </div>
+      )}
+
+      <div>
+        <div className="text-[10px] text-muted-foreground uppercase mb-1">Available Networks</div>
+        {aps.length === 0 && <p className="text-[10px] text-muted-foreground italic">No SSIDs in range. Add an Access Point and power it on.</p>}
+        <ul className="space-y-1">
+          {aps.map(ap => {
+            const clientCount = connections.filter(c => c.type === 'wireless' && (c.from === ap.id || c.to === ap.id)).length;
+            return (
+              <li key={ap.id} className="flex items-center justify-between border border-border rounded p-2 hover:border-terminal/60">
+                <div>
+                  <div className="text-xs font-mono text-foreground">📶 {ap.ssid || ap.name}</div>
+                  <div className="text-[10px] text-muted-foreground">
+                    Ch {ap.channel || 1} • {ap.wpaPassword ? 'WPA2' : 'OPEN'} • {clientCount}/{ap.maxClients || 32} clients
+                  </div>
+                </div>
+                <button
+                  onClick={() => onConnectWireless?.(device.id, ap.id)}
+                  disabled={!wIface || !!currentConn}
+                  className="px-2 py-1 text-[10px] border border-terminal text-terminal rounded hover:bg-terminal/10 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  Connect
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+        {currentConn && aps.length > 0 && (
+          <p className="text-[10px] text-muted-foreground italic mt-2">Disconnect from current network to switch.</p>
+        )}
+      </div>
     </div>
   );
 }
