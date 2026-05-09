@@ -302,21 +302,198 @@ function ServicesTab({ device, onUpdate }: { device: Device; onUpdate: (d: Devic
 
   return (
     <div className="space-y-3">
-      <h4 className="text-xs text-terminal font-display">SERVER SERVICES</h4>
+      <div className="flex items-center justify-between">
+        <h4 className="text-xs text-terminal font-display">SERVER SERVICES</h4>
+        <span className="text-[10px] text-muted-foreground">
+          {device.services.filter(s => s.enabled).length}/{device.services.length} running
+        </span>
+      </div>
       {device.services.map((svc, idx) => (
-        <div key={svc.type} className="flex items-center justify-between border border-border rounded p-3">
+        <ServiceCard key={svc.type} svc={svc} device={device} onToggle={() => toggleService(idx)} onUpdate={onUpdate} />
+      ))}
+    </div>
+  );
+}
+
+function ServiceCard({ svc, device, onToggle, onUpdate }: {
+  svc: DeviceService; device: Device; onToggle: () => void; onUpdate: (d: Device) => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const desc: Record<string, string> = {
+    dhcp: 'Dynamic Host Configuration Protocol — assigns IPs to clients.',
+    dns: 'Domain Name System — resolves hostnames to IPs.',
+    http: 'Web server — serves HTML pages on port 80.',
+    ftp: 'File Transfer Protocol — file uploads/downloads.',
+    tftp: 'Trivial FTP — used for IOS image transfer.',
+    syslog: 'Centralized log collection from network devices.',
+  };
+
+  return (
+    <div className="border border-border rounded">
+      <div className="flex items-center justify-between p-3">
+        <div className="flex items-center gap-2">
+          <div className={`w-2 h-2 rounded-full ${svc.enabled ? 'bg-terminal status-pulse' : 'bg-muted-foreground'}`} />
           <div>
             <span className="text-xs font-mono text-foreground uppercase">{svc.type}</span>
             <span className="text-[10px] text-muted-foreground ml-2">Port {svc.port}</span>
           </div>
+        </div>
+        <div className="flex gap-2">
+          <button onClick={() => setExpanded(e => !e)} className="text-[10px] text-muted-foreground hover:text-foreground px-2">
+            {expanded ? '−' : '⚙'}
+          </button>
           <button
-            onClick={() => toggleService(idx)}
+            onClick={onToggle}
             className={`px-3 py-1 text-[10px] rounded border transition-colors ${svc.enabled ? 'border-terminal text-terminal bg-terminal/10' : 'border-border text-muted-foreground hover:text-foreground'}`}
           >
             {svc.enabled ? 'RUNNING' : 'STOPPED'}
           </button>
         </div>
-      ))}
+      </div>
+      {expanded && (
+        <div className="border-t border-border p-3 space-y-2 bg-background/30">
+          <p className="text-[10px] text-muted-foreground">{desc[svc.type]}</p>
+          {svc.type === 'dhcp' && (
+            <div className="text-[10px] font-mono text-muted-foreground">
+              Pools: {device.dhcpPools.length} • Active leases: {device.dhcpPools.reduce((n, p) => n + p.leases.length, 0)}
+            </div>
+          )}
+          {svc.type === 'dns' && (
+            <div className="text-[10px] font-mono text-muted-foreground">
+              Records: {(device.dnsRecords || []).length}
+            </div>
+          )}
+          {svc.type === 'http' && (
+            <input
+              value={device.httpPageTitle || ''}
+              onChange={e => onUpdate({ ...device, httpPageTitle: e.target.value })}
+              placeholder="Page title"
+              className="w-full bg-input border border-border rounded px-2 py-1 text-[10px] font-mono text-foreground outline-none focus:border-terminal"
+            />
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function StorageTab({ device, onUpdate }: { device: Device; onUpdate: (d: Device) => void }) {
+  return (
+    <div className="space-y-3">
+      <h4 className="text-xs text-terminal font-display">HTTP CONTENT</h4>
+      <div className="border border-border rounded p-3 space-y-2">
+        <input
+          value={device.httpPageTitle || ''}
+          onChange={e => onUpdate({ ...device, httpPageTitle: e.target.value })}
+          placeholder="Page title"
+          className="w-full bg-input border border-border rounded px-2 py-1 text-xs font-mono text-foreground outline-none focus:border-terminal"
+        />
+        <textarea
+          value={device.httpPageContent || ''}
+          onChange={e => onUpdate({ ...device, httpPageContent: e.target.value })}
+          placeholder="<html>Welcome</html>"
+          rows={8}
+          className="w-full bg-input border border-border rounded px-2 py-1 text-xs font-mono text-foreground outline-none focus:border-terminal resize-none"
+        />
+      </div>
+    </div>
+  );
+}
+
+function APAdminTab({ device, allDevices, connections, onUpdate }: {
+  device: Device; allDevices: Device[]; connections: Connection[]; onUpdate: (d: Device) => void;
+}) {
+  const uplink = device.interfaces.find(i => i.name === 'Ethernet0');
+  const uplinkUp = !!uplink?.connected && uplink?.status === 'up';
+  // Wireless clients = laptops connected to this AP via wireless connection
+  const clients = connections
+    .filter(c => (c.from === device.id || c.to === device.id) && c.type === 'wireless')
+    .map(c => allDevices.find(d => d.id === (c.from === device.id ? c.to : c.from)))
+    .filter((d): d is Device => !!d);
+
+  return (
+    <div className="space-y-3">
+      <div className="border border-border rounded p-3">
+        <div className="text-[10px] text-muted-foreground uppercase mb-2">AP Status</div>
+        <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[11px] font-mono">
+          <div className="text-muted-foreground">Power</div>
+          <div className={device.status === 'up' ? 'text-terminal' : 'text-noc-red'}>{device.status === 'up' ? 'ON' : 'OFF'}</div>
+          <div className="text-muted-foreground">Uplink (Ethernet0)</div>
+          <div className={uplinkUp ? 'text-terminal' : 'text-noc-red'}>{uplinkUp ? 'UP' : 'DOWN'}</div>
+          <div className="text-muted-foreground">LAN IP</div>
+          <div className="text-foreground">{uplink?.ip || device.apLanIp || '—'}</div>
+          <div className="text-muted-foreground">Mode</div>
+          <div className="text-foreground">{device.apMode || 'ap'}</div>
+          <div className="text-muted-foreground">Channel</div>
+          <div className="text-foreground">{device.channel || 1} ({device.frequency || '2.4GHz'})</div>
+          <div className="text-muted-foreground">Connected clients</div>
+          <div className="text-foreground">{clients.length} / {device.maxClients || 32}</div>
+        </div>
+      </div>
+
+      <div className="border border-border rounded p-3">
+        <div className="text-[10px] text-muted-foreground uppercase mb-2">SSID Broadcast</div>
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="text-xs font-mono text-foreground">{device.ssid || '(unset)'}</div>
+            <div className="text-[10px] text-muted-foreground">{device.wpaPassword ? 'WPA2 Secured' : 'OPEN'}</div>
+          </div>
+          <label className="flex items-center gap-2 text-[10px] text-muted-foreground">
+            <input
+              type="checkbox"
+              checked={device.broadcastSsid !== false}
+              onChange={e => onUpdate({ ...device, broadcastSsid: e.target.checked })}
+            />
+            Broadcast
+          </label>
+        </div>
+      </div>
+
+      <div className="border border-border rounded p-3">
+        <div className="text-[10px] text-muted-foreground uppercase mb-2">Associated Clients</div>
+        {clients.length === 0 ? (
+          <p className="text-[10px] text-muted-foreground italic">No wireless clients connected.</p>
+        ) : (
+          <ul className="space-y-1 text-[11px] font-mono">
+            {clients.map(c => {
+              const wIface = c.interfaces.find(i => i.isWireless);
+              return (
+                <li key={c.id} className="flex justify-between">
+                  <span className="text-foreground">{c.name}</span>
+                  <span className="text-muted-foreground">{wIface?.ip || '—'} • {wIface?.macAddress}</span>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
+
+      <div className="border border-border rounded p-3 space-y-2">
+        <div className="text-[10px] text-muted-foreground uppercase">Quick Settings</div>
+        <div className="grid grid-cols-2 gap-2">
+          <label className="text-[10px] text-muted-foreground flex items-center gap-1">
+            <input type="checkbox" checked={!!device.macFilterEnabled} onChange={e => onUpdate({ ...device, macFilterEnabled: e.target.checked })} />
+            MAC Filter
+          </label>
+          <label className="text-[10px] text-muted-foreground flex items-center gap-1">
+            <input type="checkbox" checked={!!device.apFirewall} onChange={e => onUpdate({ ...device, apFirewall: e.target.checked })} />
+            Firewall
+          </label>
+          <label className="text-[10px] text-muted-foreground flex items-center gap-1">
+            <input type="checkbox" checked={!!device.apDhcpEnabled} onChange={e => onUpdate({ ...device, apDhcpEnabled: e.target.checked })} />
+            DHCP Server
+          </label>
+          <div>
+            <label className="text-[10px] text-muted-foreground">Max clients</label>
+            <input
+              type="number"
+              value={device.maxClients || 32}
+              onChange={e => onUpdate({ ...device, maxClients: parseInt(e.target.value) || 32 })}
+              className="w-full bg-input border border-border rounded px-2 py-0.5 text-[11px] font-mono text-foreground outline-none focus:border-terminal"
+            />
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
