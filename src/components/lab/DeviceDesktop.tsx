@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import type { Device, DeviceService, NetworkInterface } from './types';
 import type { Connection } from './types';
-import { simulateDhcp, generateConnectedRoutes } from './networkEngine';
+import { simulateDhcp, generateConnectedRoutes, resolveDns } from './networkEngine';
 
 interface DeviceDesktopProps {
   device: Device;
@@ -10,9 +10,11 @@ interface DeviceDesktopProps {
   onUpdateDevice: (device: Device) => void;
   onClose: () => void;
   onLaunchTerminal?: () => void;
+  onConnectWireless?: (clientId: string, apId: string) => void;
+  onDisconnect?: (connectionId: string) => void;
 }
 
-export function DeviceDesktop({ device, allDevices = [], connections = [], onUpdateDevice, onClose, onLaunchTerminal }: DeviceDesktopProps) {
+export function DeviceDesktop({ device, allDevices = [], connections = [], onUpdateDevice, onClose, onLaunchTerminal, onConnectWireless, onDisconnect }: DeviceDesktopProps) {
   const isPcLike = device.type === 'pc' || device.type === 'laptop';
   const isServer = device.type === 'server';
   const isAP = device.type === 'accesspoint';
@@ -84,7 +86,15 @@ export function DeviceDesktop({ device, allDevices = [], connections = [], onUpd
           )}
           {tab === 'network' && <NetworkTab device={device} onUpdate={onUpdateDevice} />}
           {tab === 'wireless' && isAP && <APWirelessTab device={device} onUpdate={onUpdateDevice} />}
-          {tab === 'wireless' && device.type === 'laptop' && <LaptopWirelessTab device={device} />}
+          {tab === 'wireless' && device.type === 'laptop' && (
+            <LaptopWirelessTab
+              device={device}
+              allDevices={allDevices}
+              connections={connections}
+              onConnectWireless={onConnectWireless}
+              onDisconnect={onDisconnect}
+            />
+          )}
           {tab === 'admin' && isAP && <APAdminTab device={device} allDevices={allDevices} connections={connections} onUpdate={onUpdateDevice} />}
           {tab === 'services' && isServer && <ServicesTab device={device} onUpdate={onUpdateDevice} />}
           {tab === 'storage' && isServer && <StorageTab device={device} onUpdate={onUpdateDevice} />}
