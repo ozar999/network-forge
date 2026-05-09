@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import type { Device } from './types';
-import { generateConnectedRoutes, simulatePing, simulateTraceroute } from './networkEngine';
+import { generateConnectedRoutes, simulatePing, simulateTraceroute, simulateDhcp } from './networkEngine';
 
 import type { PingResult } from './PingResultPopup';
 import { processRouterCommand, getRouterPrompt, getRouterCompletions, type CliContext } from './cli/routerCommands';
@@ -25,14 +25,21 @@ function getCiscoCommands(device: Device | null, mode: string): Record<string, s
   if (isPcLike) {
     return {
       '': ['ipconfig', 'ping', 'tracert', 'arp', 'nslookup', 'netstat', 'route', 'help', 'clear'],
-      'ipconfig': ['/all'],
+      'ipconfig': ['/all', '/release', '/renew'],
+      'route': ['print', 'add', 'delete'],
     };
   }
   if (device.type === 'server') {
     return {
       '': ['ifconfig', 'ip', 'ping', 'traceroute', 'netstat', 'service', 'help', 'clear'],
       'ip': ['addr', 'route'],
-      'service': ['dhcpd', 'named', 'vsftpd', 'apache2'],
+      'service': ['dhcpd', 'named', 'vsftpd', 'apache2', 'tftpd', 'rsyslog'],
+      'service dhcpd': ['start', 'stop', 'status', 'restart'],
+      'service named': ['start', 'stop', 'status', 'restart'],
+      'service vsftpd': ['start', 'stop', 'status', 'restart'],
+      'service apache2': ['start', 'stop', 'status', 'restart'],
+      'service tftpd': ['start', 'stop', 'status', 'restart'],
+      'service rsyslog': ['start', 'stop', 'status', 'restart'],
     };
   }
   if (device.type === 'accesspoint') return { '': [] };
