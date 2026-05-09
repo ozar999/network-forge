@@ -128,7 +128,47 @@ export function TerminalPanel({ device, onCommand, allDevices = [], connections 
 
   const processPcCommand = (trimmed: string, parts: string[], dev: Device): string => {
     if (trimmed === 'help' || trimmed === '?') {
-      return 'Available commands:\n  ipconfig        - Display IP configuration\n  ipconfig /all   - Display detailed IP configuration\n  ping <ip>       - Send ICMP echo\n  tracert <ip>    - Trace route\n  arp -a          - Display ARP table\n  nslookup <name> - DNS lookup\n  clear           - Clear screen';
+      return 'Available commands:\n  ipconfig            - Display IP configuration\n  ipconfig /all       - Detailed IP configuration\n  ipconfig /release   - Release DHCP lease\n  ipconfig /renew     - Renew DHCP lease\n  ping <ip>           - Send ICMP echo\n  tracert <ip>        - Trace route\n  arp -a              - Display ARP table\n  nslookup <name>     - DNS lookup\n  route print         - Print routing table\n  netstat -an         - Show connections\n  clear               - Clear screen';
+    }
+    if (trimmed === 'ipconfig /release') {
+      if (!onUpdateDevice) return 'Cannot modify device.';
+      const newIfaces = dev.interfaces.map(i => ({ ...i, ip: undefined, mask: undefined }));
+      onUpdateDevice({ ...dev, interfaces: newIfaces, defaultGateway: undefined });
+      return dev.interfaces.map(i =>
+        `${i.isWireless ? 'Wireless' : 'Ethernet'} adapter ${i.name}:\n\n   Connection-specific DNS Suffix  . :\n   IPv4 Address. . . . . . . . . . :\n   Subnet Mask . . . . . . . . . . :\n   Default Gateway . . . . . . . . :`
+      ).join('\n\n');
+    }
+    if (trimmed === 'ipconfig /renew') {
+      if (!onUpdateDevice) return 'Cannot modify device.';
+      const primary = dev.interfaces[0];
+      const result = simulateDhcp(dev, primary.name, allDevices, connections);
+      if (!result.success) {
+        return `An error occurred while renewing interface ${primary.name}:\nunable to contact your DHCP server.`;
+      }
+      const newIfaces = [...dev.interfaces];
+      newIfaces[0] = { ...newIfaces[0], ip: result.ip, mask: result.mask };
+      onUpdateDevice({
+        ...dev,
+        interfaces: newIfaces,
+        defaultGateway: result.gateway || dev.defaultGateway,
+        dnsServer: result.dns || dev.dnsServer,
+        dhcpEnabled: true,
+      });
+      return `${primary.isWireless ? 'Wireless' : 'Ethernet'} adapter ${primary.name}:\n\n   Connection-specific DNS Suffix  . :\n   IPv4 Address. . . . . . . . . . : ${result.ip}\n   Subnet Mask . . . . . . . . . . : ${result.mask}\n   Default Gateway . . . . . . . . : ${result.gateway || ''}`;
+    }
+    if (trimmed === 'route print' || trimmed === 'route') {
+      const routes = generateConnectedRoutes(dev);
+      const header = '===========================================================================\nIPv4 Route Table\n===========================================================================\nNetwork Destination        Netmask          Gateway       Interface  Metric';
+      const rows = routes.map(r =>
+        `${r.network.padEnd(20)} ${r.mask.padEnd(16)} On-link       ${(dev.interfaces.find(i => i.name === r.interface)?.ip || '').padEnd(11)} 1`
+      );
+      const def = dev.defaultGateway
+        ? `0.0.0.0              0.0.0.0          ${dev.defaultGateway.padEnd(13)} ${(dev.interfaces[0]?.ip || '').padEnd(11)} 1`
+        : '';
+      return [header, def, ...rows, '==========================================================================='].filter(Boolean).join('\n');
+    }
+    if (trimmed === 'netstat -an' || trimmed === 'netstat') {
+      return 'Active Connections\n\n  Proto  Local Address          Foreign Address        State\n  TCP    0.0.0.0:135            0.0.0.0:0              LISTENING\n  TCP    0.0.0.0:445            0.0.0.0:0              LISTENING';
     }
     if (trimmed === 'ipconfig') {
       return dev.interfaces.map(i =>
@@ -175,7 +215,52 @@ export function TerminalPanel({ device, onCommand, allDevices = [], connections 
 
   const processServerCommand = (trimmed: string, parts: string[], dev: Device): string => {
     if (trimmed === 'help' || trimmed === '?') {
-      return 'Available commands:\n  ifconfig        - Display network interfaces\n  ip addr         - Display IP addresses\n  ip route        - Display routing table\n  ping <ip>       - Send ICMP echo\n  traceroute <ip> - Trace route\n  netstat -tlnp   - Show listening ports\n  service <name> start/stop - Manage services\n  clear           - Clear screen';
+      return 'Available commands:\n  ifconfig                       - Display network interfaces\n  ifconfig <iface> up/down       - Toggle interface\n  ip addr                        - Display IP addresses\n  ip route                       - Display routing table\n  ping <ip>                      - Send ICMP echo\n  traceroute <ip>                - Trace route\n  netstat -tlnp                  - Show listening ports\n  service <name> start|stop|status|restart\n  systemctl <action> <name>      - Manage services\n  clear                          - Clear screen';
+    }
+    // service / systemctl management
+    const svcMap: Record<string, string> = {
+      dhcpd: 'dhcp', named: 'dns', bind9: 'dns', apache2: 'http', httpd: 'http',
+      vsftpd: 'ftp', tftpd: 'tftp', 'tftpd-hpa': 'tftp', rsyslog: 'syslog', syslog: 'syslog',
+    };
+    let svcParts: string[] | null = null;
+    if (parts[0] === 'service' && parts.length >= 3) {
+      svcParts = [parts[1], parts[2]];
+    } else if (parts[0] === 'systemctl' && parts.length >= 3) {
+      svcParts = [parts[2].replace(/\.service$/, ''), parts[1]];
+    }
+    if (svcParts) {
+      const [name, action] = svcParts;
+      const svcType = svcMap[name];
+      if (!svcType) return `Unit ${name}.service not found.`;
+      const idx = dev.services.findIndex(s => s.type === svcType);
+      if (idx < 0) return `Unit ${name}.service not found.`;
+      const svc = dev.services[idx];
+      if (action === 'status') {
+        return `● ${name}.service\n   Loaded: loaded\n   Active: ${svc.enabled ? 'active (running)' : 'inactive (dead)'}\n   Listen: 0.0.0.0:${svc.port}`;
+      }
+      if (action === 'start' || action === 'stop' || action === 'restart') {
+        if (!onUpdateDevice) return 'Cannot modify device.';
+        const enabled = action === 'stop' ? false : true;
+        const newServices = [...dev.services];
+        newServices[idx] = { ...svc, enabled };
+        onUpdateDevice({ ...dev, services: newServices });
+        return action === 'restart'
+          ? `Restarting ${name}.service... [  OK  ]`
+          : action === 'start'
+            ? `Starting ${name}.service... [  OK  ]`
+            : `Stopping ${name}.service... [  OK  ]`;
+      }
+      return `Unknown action: ${action}`;
+    }
+    // ifconfig <iface> up/down
+    if (parts[0] === 'ifconfig' && parts.length >= 3 && (parts[2] === 'up' || parts[2] === 'down')) {
+      if (!onUpdateDevice) return 'Cannot modify device.';
+      const idx = dev.interfaces.findIndex(i => i.name === parts[1]);
+      if (idx < 0) return `${parts[1]}: error fetching interface information: Device not found`;
+      const newIfaces = [...dev.interfaces];
+      newIfaces[idx] = { ...newIfaces[idx], status: parts[2] as 'up' | 'down' };
+      onUpdateDevice({ ...dev, interfaces: newIfaces });
+      return '';
     }
     if (trimmed === 'ifconfig' || trimmed === 'ip addr') {
       return dev.interfaces.map(i =>
