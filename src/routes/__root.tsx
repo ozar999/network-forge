@@ -1,5 +1,6 @@
 import { Outlet, createRootRoute, HeadContent, Scripts } from "@tanstack/react-router";
 import { Navbar } from "../components/Navbar";
+import { ThemeProvider, THEME_BOOTSTRAP_SCRIPT } from "../components/ThemeProvider";
 
 import appCss from "../styles.css?url";
 
@@ -43,6 +44,7 @@ function RootShell({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
       <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_BOOTSTRAP_SCRIPT }} />
         <HeadContent />
       </head>
       <body>
@@ -55,9 +57,9 @@ function RootShell({ children }: { children: React.ReactNode }) {
 
 function RootComponent() {
   return (
-    <>
+    <ThemeProvider>
       <Navbar />
       <Outlet />
-    </>
+    </ThemeProvider>
   );
 }
