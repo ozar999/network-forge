@@ -1,146 +1,81 @@
 
-# NETSEM Lab Simulator — Major Upgrade Plan
+# NetSem Major Upgrade — Implementation Plan
 
-This plan covers all changes scoped **exclusively** to the Lab/Workspace page.
+This is a very large scope (7 major features). To keep quality high and avoid regressions, I'll deliver it in **phases**, shipping each phase as a working, testable unit. You can review after each phase and redirect if needed.
 
 ---
 
-## Phase 1: Pan/Zoom Canvas with Dot Grid
+## Phase 1 — Theme System (Dark / Light Mode)
+- Add CSS variables for both themes in `src/styles.css` using your exact hex values (converted to oklch where needed for the existing token system, but mapped 1:1).
+- `ThemeProvider` + `useTheme` hook in `src/components/ThemeProvider.tsx`, persisted in `localStorage` (`netsem_theme`), applied pre-hydration via inline script in `__root.tsx` to prevent flash.
+- 32×32 round toggle button in `Navbar.tsx` (🌙 / ☀️) with 0.2s transitions.
+- Audit and replace hardcoded colors in Lab components (canvas grid, cables, device nodes, minimap, modals) to use tokens.
 
-**Files:** `TopologyCanvas.tsx`, `src/styles.css`
+## Phase 2 — Floating Terminal Drawer
+- Remove the 384px right-side TerminalPanel from `LabSimulator.tsx`; canvas becomes full-width.
+- New `TerminalDrawer.tsx` system:
+  - Bottom tab bar (40px) with per-device pills, max 4 visible, horizontal scroll, close (✕) per pill.
+  - Expanded drawer (default 280px, drag-resize 120–400px) overlays canvas, doesn't push it.
+  - Per-device-type tabs inside drawer (Router: CLI/Interfaces/Routing, PC: Terminal/Network/WiFi, Server: Terminal/Services/Interfaces, AP: Wireless/Network/Clients, Firewall: CLI/Interfaces).
+  - State managed in `useTerminalTabs` hook (open tabs, active tab, history retention).
+  - Click device → open/focus tab (collapsed). Double-click → expand. Esc → collapse.
+- Move existing TerminalPanel logic into the CLI tab content; reuse existing Interfaces/Routing/Services panels from `DeviceDesktop.tsx` (extract into shared components).
 
-- Add pan/zoom state (`scale`, `offsetX`, `offsetY`) using CSS `transform`
-- Scroll wheel = zoom centered on cursor position
-- Middle-click drag OR Space+drag = pan
-- Replace line grid with dot grid background that moves with pan/zoom
-- Add zoom in/out/fit-to-screen buttons (bottom-right corner)
-- Add minimap in bottom-right showing full topology overview
-- Update device positioning and connection lines to work in transformed coordinate space
-- Fix drag-and-drop to account for transform offsets
+## Phase 3 — Smart CLI: Abbreviations + AI Autocomplete
+- Add abbreviation resolver in `src/components/lab/cli/abbreviations.ts` — prefix match against mode-specific command list; unambiguous prefix executes, ambiguous shows matches (same as Tab).
+- Apply expansion before existing command processor; covers full list you provided (`en`, `conf t`, `int g0/0`, `sh ip int br`, etc.).
+- Autocomplete dropdown above input:
+  - Instant local matches from current mode's command set.
+  - Interface-aware: `int ` / `int g` / `int f` lists actual device interfaces filtered by prefix.
+  - After 600ms pause + ≥2 chars + <3 local matches → background AI call via existing `ai-chat` server function, asking for 4 JSON-array suggestions. AI items prefixed ✨ in green.
+  - Keyboard: ↑/↓ navigate, Enter selects (fills input only), Esc closes, click fills.
+  - Spinner while waiting; max 6 visible, scrollable.
 
-## Phase 2: Device Toolbar + Laptop/AP in Toolbar
+## Phase 4 — Real Network Simulation Engine
+- Rewrite `networkEngine.ts` core:
+  - `findIp(ip)` → device + interface lookup; fail fast if dest doesn't exist.
+  - `sameSubnet(srcIp, srcMask, dstIp)` check.
+  - BFS over `connections[]` treating switches as transparent L2.
+  - For different subnets: require default gateway/static route on source; verify a router on path has interface in source subnet AND route (connected/static/OSPF) to destination subnet.
+  - All four rules + specific failure reasons matching your spec.
+- Path animation: green 8px SVG circle traveling exact cable polyline at ~600ms/hop using `requestAnimationFrame`, plus smaller return circle.
+- Upgrade `PingResultPopup.tsx` to your new design: hop chain (clickable to select device), packet bar (`!!!!!` / `U.U.U.U.U`), RTT line, fix suggestions, 8s auto-dismiss with countdown bar, "Ask AI to fix" pre-fills topology JSON + reason into AI assistant.
+- `traceroute` command shows numbered hop list.
 
-**Files:** `DeviceToolbar.tsx`
+## Phase 5 — Professional Courses Platform
+- New route `/courses/$courseId/$lessonId` with sidebar + reader layout.
+- Course data in `src/data/courses/` — one TS module per course with structured lesson content (headings, paragraphs, code blocks, tables, SVG diagrams, info boxes, quizzes). 8 courses, ~30 lessons total with **real** networking content (OSI, TCP/IP, subnetting, OSPF, VLANs, ACLs, NAT, WiFi standards, troubleshooting, CCNA).
+- Reader components: `CourseSidebar`, `LessonReader`, `CodeBlock` (with copy + line numbers), `DataTable` (sortable, sticky header), inline SVG diagram components (OSI stack, subnet visual, NAT, VLAN, STP, ARP flow, OSPF areas, connectivity flowchart), `InfoBox` (tip/warning/remember/lab), `Quiz` component, `Certificate` modal.
+- "Open in Lab" / LAB box → loads a preset topology into Lab via existing save/load.
+- Progress persisted per user.
 
-- Add Laptop and AccessPoint icons to the device toolbar (they already exist in DeviceIcons but aren't in the toolbar)
+## Phase 6 — Auth & User Accounts (Lovable Cloud)
+- Enable Lovable Cloud (Supabase under the hood) for real auth — needed because you want cross-device sync and a real signup/login flow. Guest mode still works against localStorage.
+- `profiles` table (id FK → auth.users, name, username, avatar emoji, created_at) with RLS + auto-create trigger.
+- `/signup` page: name, email, username (live availability check), password with strength bar + checklist, confirm, emoji avatar picker (15 options), success animation, redirect.
+- `/login` page: email/username, password, remember me (30d), forgot password (→ `/reset-password`), "Continue as Guest".
+- `AuthProvider` with `onAuthStateChange` listener; navbar shows avatar+username dropdown (Dashboard/Settings/Logout) or Login/Sign Up.
+- `/settings`: profile edit, preferences (default theme, default device), API keys (move OpenAI key mgmt here), data export (JSON), clear data.
+- Guest-to-account migration: on signup, copy `netsem_*` localStorage into user-scoped keys / DB.
 
-## Phase 3: Auto-Save Workspace Persistence
-
-**Files:** `useLabState.ts`, `LabSimulator.tsx`
-
-- Auto-save entire workspace state to `localStorage` on every change (devices, connections, positions, configs, routing tables, DHCP bindings, ARP tables, VLAN tables, services)
-- Restore workspace state on page load — canvas appears exactly as left
-- "Clear Lab" button explicitly clears workspace
-- Save/Load named labs with proper modal UI instead of `prompt()` dialogs
-- Restore `deviceCounter` and `connectionCounter` from loaded state
-
-## Phase 4: Ping Result Popup
-
-**Files:** `LabSimulator.tsx` (new PingResultPopup component), `TerminalPanel.tsx`, `networkEngine.ts`
-
-- When `ping` runs from CLI, show floating popup with:
-  - Source device + IP, destination IP
-  - SUCCESS (green) or FAIL (red) with specific reason
-  - Animated packet on canvas along the cable path
-- Failure reasons: "No route to host", "Different subnet, no gateway", "Destination unreachable", "Interface down"
-- "Ask AI" button linking to AI assistant with context
-
-## Phase 5: Massively Expanded CLI
-
-**Files:** `TerminalPanel.tsx` (refactored into separate command processor modules)
-
-### Router/Switch IOS commands (all reading/writing real device state):
-- All `show` commands from the spec (show ip route, show run, show interfaces, show cdp neighbors, show ip dhcp binding, show ip nat translations, show access-lists, etc.)
-- Config modes: `config`, `config-if`, `config-router`, `dhcp-config`, `config-line`
-- Routing protocols: `router ospf`, `router rip`, `router eigrp`, `router bgp` with `network` statements (simplified simulation)
-- DHCP: `ip dhcp pool`, `network`, `default-router`, `dns-server`, `lease`, `ip dhcp excluded-address`
-- NAT: `ip nat inside/outside`, `ip nat inside source list`
-- ACL: `ip access-list extended`, `permit/deny` statements, `ip access-group`
-- VLANs: `vlan [id]`, `name`, switchport commands
-- STP: `spanning-tree mode`, `spanning-tree portfast`
-- Security: `enable secret`, `banner motd`, `service password-encryption`, `line vty/console`, `login local`, `transport input ssh`
-- Save: `copy running-config startup-config`, `write memory`, `copy run tftp`
-- Debug: `debug ip icmp`, `no debug all`
-- `clock set`, `show version` with uptime
-
-### PC/Laptop CMD commands:
-- `ipconfig`, `ipconfig /all`, `ipconfig /release`, `ipconfig /renew`
-- `ping`, `tracert`, `arp -a`, `arp -d`, `nslookup`, `route print`, `netstat -an`, `netstat -r`
-
-### Server Linux commands:
-- `ifconfig`, `ip addr show`, `ip addr add`, `ip route show`, `ip route add`
-- `ping`, `traceroute`, `arp -n`, `netstat -an`, `route -n`
-- `service [dhcpd|named|vsftpd|apache2|syslogd] start/stop/status`
-- `cat /var/log/syslog`
-
-### Firewall ASA commands:
-- `enable`, `configure terminal`
-- `interface`, `nameif`, `security-level`, `ip address`, `no shutdown`
-- `object network`, `nat (inside,outside) dynamic interface`
-- `access-list extended permit/deny`
-- `access-group [name] in interface [nameif]`
-- `route outside 0.0.0.0 0.0.0.0 [next-hop]`
-- `show conn`, `show xlate`, `show interface ip brief`, `show running-config`
-
-### Access Point:
-- No CLI. Terminal shows: "Access Points are configured via GUI only. Double-click to open admin panel."
-
-### Context-aware tab autocomplete:
-- Different command sets per mode (user/privileged/config/config-if/config-router/dhcp-config/config-line)
-- Tab with multiple matches shows list below input
-- Prompt updates dynamically with hostname changes
-
-## Phase 6: Enhanced Desktop GUIs
-
-**Files:** `DeviceDesktop.tsx` (major rewrite)
-
-### PC/Laptop Desktop:
-- Taskbar at bottom with app icons
-- Desktop with app shortcuts
-- Apps open as windows inside the popup:
-  - **Network Settings**: IP, mask (dropdown /8 /16 /24 /25 /30), gateway, DNS, Static/DHCP toggle, Apply button, status indicator
-  - **Wireless Settings** (PC + Laptop): Scan networks, show SSIDs from APs on canvas, signal strength bars, connect with password
-  - **Terminal**: Full CMD terminal embedded
-  - **Browser**: Address bar, shows fake webpage if HTTP server + DNS configured, else error page
-  - **File Manager**: Basic simulated filesystem for TFTP
-
-### Access Point Admin Panel:
-- Tabs: Wireless Settings, Network Settings, Connected Clients, Security
-- Wireless: SSID, password, channel (1-13), frequency 2.4/5GHz, broadcast toggle, max clients
-- Network: WAN info, LAN IP, subnet, DHCP server toggle with pool config
-- Connected Clients: table with hostname, MAC, IP, connection type, signal
-- Security: admin password, firewall toggle, MAC filtering
-
-### Server Admin Panel:
-- Sidebar navigation with service sections
-- DHCP Server: pool config, excluded addresses, active leases table
-- DNS Server: A records, CNAME records, zone table, test resolve
-- FTP Server: enable/disable, port, credentials
-- TFTP Server: enable/disable, file list
-- HTTP Server: enable/disable, ports, custom page content
-- Syslog Server: enable/disable, log table
-- NTP Server: enable/disable, stratum
-- Embedded terminal
-
-## Phase 7: Enhanced Network Engine
-
-**Files:** `networkEngine.ts`, `types.ts`
-
-- Routing protocol simulation (OSPF/RIP route learning between connected routers)
-- DHCP lease assignment from pools
-- ARP table population during ping
-- VLAN isolation enforcement
-- NAT translation tracking
-- ACL filtering on ping paths
-- DNS resolution through configured DNS servers
+## Phase 7 — Active Dashboard + Tracking + Responsive Polish
+- `useTracker` hook + central event bus: every device add, cable, ping, command, save, AI message, login increments counters in `netsem_user_{id}_stats` (or Cloud table for logged-in users).
+- XP/level system with floating "+N XP" animation on earn.
+- Dashboard sections A–J: profile hero (avatar, streak, level, XP bar), 8 stat cards with count-up animation, 30-day activity line chart (pure SVG), ping success donut, device bar chart, top-5 commands, course progress, recent labs, achievements grid (8 badges with unlock conditions), GitHub-style 52-week heatmap.
+- Real-time updates via `setInterval(30s)` reading from storage.
+- Responsive pass across all pages: navbar hamburger <768px, courses sidebar → drawer on mobile, dashboard 4→2→1 column grid, lab usable on tablet (drawer adapts, toolbar wraps).
 
 ---
 
 ## Technical Notes
+- All data: localStorage for guests; Lovable Cloud (Supabase) for authed users. No external chart libs — pure SVG.
+- AI calls reuse existing `src/server/ai-chat.functions.ts`.
+- All new UI uses semantic tokens from `src/styles.css` — no hardcoded colors.
+- Each phase is independently shippable and won't break existing CLI/save/load/AI/AP/server/DHCP/OSPF features.
 
-- All simulation logic in pure TypeScript, no backend
-- localStorage for all persistence
-- Existing dark terminal aesthetic preserved (green #22c55e accents)
-- Canvas uses CSS transforms for pan/zoom (no canvas API)
-- CLI command processor will be split into separate files per device type for maintainability
-- Backward compatible with existing codebase structure
+---
+
+## Delivery Approach
+Given the size (~40+ new files, ~15 edits, real course content writing), I propose shipping **one phase per turn**. I'll start with **Phase 1 (theme) + Phase 2 (floating terminal)** together since they're the most visible UX wins and the user is currently on the Lab page.
+
+**Question before I start:** Are you OK with me **enabling Lovable Cloud** in Phase 6 for real auth (recommended), or do you want auth to stay 100% localStorage-based (simpler, but no real password security and no cross-device sync)?
