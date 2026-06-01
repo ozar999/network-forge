@@ -1,7 +1,7 @@
 import React from 'react';
 import { useState } from 'react';
 import { TopologyCanvas } from './TopologyCanvas';
-import { TerminalPanel } from './TerminalPanel';
+import { FloatingTerminal } from './FloatingTerminal';
 import { DeviceToolbar } from './DeviceToolbar';
 import { useLabState } from './useLabState';
 import { InterfaceSelectModal } from './InterfaceSelectModal';
@@ -12,11 +12,33 @@ import { useNavigate } from '@tanstack/react-router';
 
 export function LabSimulator() {
   const lab = useLabState();
-  const selectedDev = lab.devices.find(d => d.id === lab.selectedDevice) || null;
   const [interfaceModal, setInterfaceModal] = useState<{ device: Device; step: 'from' | 'to'; fromIface?: string } | null>(null);
   const [desktopDevice, setDesktopDevice] = useState<Device | null>(null);
   const [pingResult, setPingResult] = useState<PingResult | null>(null);
+  // Floating terminal tabs
+  const [openTerminalIds, setOpenTerminalIds] = useState<string[]>([]);
+  const [activeTerminalId, setActiveTerminalId] = useState<string | null>(null);
+  const [terminalExpanded, setTerminalExpanded] = useState(false);
   const navigate = useNavigate();
+
+  const openTerminal = (deviceId: string, expand: boolean) => {
+    setOpenTerminalIds(prev => prev.includes(deviceId) ? prev : [...prev, deviceId]);
+    setActiveTerminalId(deviceId);
+    lab.setSelectedDevice(deviceId);
+    if (expand) setTerminalExpanded(true);
+  };
+
+  const closeTerminal = (deviceId: string) => {
+    setOpenTerminalIds(prev => {
+      const next = prev.filter(id => id !== deviceId);
+      if (activeTerminalId === deviceId) {
+        const newActive = next[next.length - 1] || null;
+        setActiveTerminalId(newActive);
+        if (!newActive) setTerminalExpanded(false);
+      }
+      return next;
+    });
+  };
 
   const handleStartConnection = (deviceId: string) => {
     if (lab.connectingFrom === null) {
@@ -53,9 +75,19 @@ export function LabSimulator() {
     }
   };
 
+  const handleSelectDevice = (deviceId: string) => {
+    lab.setSelectedDevice(deviceId);
+    // Open or focus terminal tab (collapsed by default)
+    openTerminal(deviceId, false);
+  };
+
   const handleDoubleClick = (deviceId: string) => {
     const device = lab.devices.find(d => d.id === deviceId);
-    if (device && device.type !== 'router' && device.type !== 'switch' && device.type !== 'firewall') {
+    if (!device) return;
+    // For PC/laptop/server/AP: open desktop GUI. For network gear: expand terminal.
+    if (device.type === 'router' || device.type === 'switch' || device.type === 'firewall') {
+      openTerminal(deviceId, true);
+    } else {
       setDesktopDevice(device);
     }
   };
@@ -80,16 +112,15 @@ export function LabSimulator() {
         onClear={lab.clearWorkspace}
         connectingFrom={lab.connectingFrom}
       />
-      <div className="flex flex-1 min-h-0">
-        {/* Canvas area */}
-        <div className="flex-1 flex flex-col min-w-0">
+      <div className="relative flex-1 min-h-0">
+        {/* Full-width canvas */}
           <TopologyCanvas
             devices={lab.devices}
             connections={lab.connections}
             packets={lab.packets}
             selectedDevice={lab.selectedDevice}
             connectingFrom={lab.connectingFrom}
-            onSelectDevice={lab.setSelectedDevice}
+            onSelectDevice={handleSelectDevice}
             onStartConnection={handleStartConnection}
             onStartDrag={lab.startDrag}
             onDrag={lab.onDrag}
@@ -100,18 +131,23 @@ export function LabSimulator() {
             onPing={lab.runPingSimulation}
             onDoubleClick={handleDoubleClick}
           />
-        </div>
-        {/* Terminal panel */}
-        <div className="w-96 border-l border-border bg-card/50 flex flex-col">
-          <TerminalPanel
-            device={selectedDev}
-            onCommand={lab.handleCommand}
-            allDevices={lab.devices}
-            connections={lab.connections}
-            onUpdateDevice={lab.updateDevice}
-            onPingResult={handlePingResult}
-          />
-        </div>
+
+        {/* Floating terminal drawer + tab bar — overlays canvas, doesn't push it */}
+        <FloatingTerminal
+          devices={lab.devices}
+          openIds={openTerminalIds}
+          activeId={activeTerminalId}
+          expanded={terminalExpanded}
+          allDevices={lab.devices}
+          connections={lab.connections}
+          onCommand={lab.handleCommand}
+          onUpdateDevice={lab.updateDevice}
+          onPingResult={handlePingResult}
+          onFocus={(id) => { setActiveTerminalId(id); lab.setSelectedDevice(id); }}
+          onClose={closeTerminal}
+          onToggleExpanded={() => setTerminalExpanded(e => !e)}
+          onMinimize={() => setTerminalExpanded(false)}
+        />
       </div>
 
       {interfaceModal && (
@@ -130,7 +166,7 @@ export function LabSimulator() {
           connections={lab.connections}
           onUpdateDevice={(d) => { lab.updateDevice(d); setDesktopDevice(d); }}
           onClose={() => setDesktopDevice(null)}
-          onLaunchTerminal={() => { lab.setSelectedDevice(desktopDevice.id); }}
+          onLaunchTerminal={() => { openTerminal(desktopDevice.id, true); setDesktopDevice(null); }}
           onConnectWireless={lab.connectWireless}
           onDisconnect={lab.removeConnection}
         />
