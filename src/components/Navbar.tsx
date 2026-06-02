@@ -34,7 +34,6 @@ export function Navbar() {
         ))}
       </div>
       <div className="flex-1" />
-      <span className="hidden lg:inline text-[10px] text-muted-foreground font-mono">v1.0.0 // SIMULATION MODE</span>
       <button
         onClick={toggle}
         aria-label="Toggle theme"
