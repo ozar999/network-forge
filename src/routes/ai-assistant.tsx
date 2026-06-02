@@ -1,7 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router';
 import React, { useState, useRef, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
-import { chatWithAI } from '../server/ai-chat.functions';
+import { chatWithAI } from '../lib/ai-chat.functions';
 
 export const Route = createFileRoute('/ai-assistant')({
   head: () => ({
