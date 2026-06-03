@@ -18,6 +18,7 @@ interface TopologyCanvasProps {
   onRemoveDevice: (id: string) => void;
   onPing: (fromId: string, toId: string) => void;
   onDoubleClick?: (id: string) => void;
+  onRenameDevice?: (id: string, name: string) => void;
 }
 
 export function TopologyCanvas({
@@ -36,6 +37,7 @@ export function TopologyCanvas({
   onRemoveDevice,
   onPing,
   onDoubleClick,
+  onRenameDevice,
 }: TopologyCanvasProps) {
   const canvasRef = useRef<HTMLDivElement>(null);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; deviceId: string } | null>(null);
@@ -364,6 +366,20 @@ export function TopologyCanvas({
             </button>
           )}
           <hr className="border-border my-1" />
+          {onRenameDevice && (
+            <button
+              className="w-full text-left px-3 py-1.5 text-xs text-foreground hover:bg-accent transition-colors"
+              onClick={(e) => {
+                e.stopPropagation();
+                const dev = devices.find(d => d.id === contextMenu.deviceId);
+                const next = prompt('Rename device:', dev?.name || '');
+                if (next && next.trim()) onRenameDevice(contextMenu.deviceId, next.trim());
+                setContextMenu(null);
+              }}
+            >
+              ✏️ Rename
+            </button>
+          )}
           <button
             className="w-full text-left px-3 py-1.5 text-xs text-noc-red hover:bg-accent transition-colors"
             onClick={(e) => { e.stopPropagation(); onRemoveDevice(contextMenu.deviceId); setContextMenu(null); }}
