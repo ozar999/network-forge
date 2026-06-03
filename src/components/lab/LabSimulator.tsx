@@ -7,6 +7,7 @@ import { useLabState } from './useLabState';
 import { InterfaceSelectModal } from './InterfaceSelectModal';
 import { DeviceDesktop } from './DeviceDesktop';
 import { PingResultPopup, type PingResult } from './PingResultPopup';
+import { DeviceConfigPanel } from './DeviceConfigPanel';
 import type { Device } from './types';
 import { useNavigate } from '@tanstack/react-router';
 
@@ -19,6 +20,7 @@ export function LabSimulator() {
   const [openTerminalIds, setOpenTerminalIds] = useState<string[]>([]);
   const [activeTerminalId, setActiveTerminalId] = useState<string | null>(null);
   const [terminalExpanded, setTerminalExpanded] = useState(false);
+  const [configPanelOpen, setConfigPanelOpen] = useState(false);
   const navigate = useNavigate();
 
   const openTerminal = (deviceId: string, expand: boolean) => {
@@ -77,8 +79,8 @@ export function LabSimulator() {
 
   const handleSelectDevice = (deviceId: string) => {
     lab.setSelectedDevice(deviceId);
-    // Open or focus terminal tab (collapsed by default)
-    openTerminal(deviceId, false);
+    // Open the right-side config panel; terminal opens on double-click or Console button
+    setConfigPanelOpen(true);
   };
 
   const handleDoubleClick = (deviceId: string) => {
@@ -148,6 +150,22 @@ export function LabSimulator() {
           onToggleExpanded={() => setTerminalExpanded(e => !e)}
           onMinimize={() => setTerminalExpanded(false)}
         />
+
+        {/* Right-side device config panel */}
+        {configPanelOpen && lab.selectedDevice && (() => {
+          const dev = lab.devices.find(d => d.id === lab.selectedDevice);
+          if (!dev) return null;
+          return (
+            <DeviceConfigPanel
+              device={dev}
+              connections={lab.connections}
+              onClose={() => setConfigPanelOpen(false)}
+              onUpdateDevice={lab.updateDevice}
+              onOpenTerminal={(id) => openTerminal(id, true)}
+              onRemoveConnection={lab.removeConnection}
+            />
+          );
+        })()}
       </div>
 
       {interfaceModal && (
