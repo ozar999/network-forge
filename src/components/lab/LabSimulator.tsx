@@ -132,6 +132,10 @@ export function LabSimulator() {
             onRemoveDevice={lab.removeDevice}
             onPing={lab.runPingSimulation}
             onDoubleClick={handleDoubleClick}
+            onRenameDevice={(id, name) => {
+              const dev = lab.devices.find(d => d.id === id);
+              if (dev) lab.updateDevice({ ...dev, name, hostname: name });
+            }}
           />
 
         {/* Floating terminal drawer + tab bar — overlays canvas, doesn't push it */}
