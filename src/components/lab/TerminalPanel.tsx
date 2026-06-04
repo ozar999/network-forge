@@ -5,6 +5,7 @@ import { generateConnectedRoutes, simulatePing, simulateTraceroute, simulateDhcp
 import type { PingResult } from './PingResultPopup';
 import { processRouterCommand, getRouterPrompt, getRouterCompletions, type CliContext } from './cli/routerCommands';
 import { expandCiscoCommand, getSuggestions } from './cli/abbreviations';
+import { trackEvent } from '@/lib/progress';
 
 interface TerminalPanelProps {
   device: Device | null;
@@ -307,6 +308,7 @@ export function TerminalPanel({ device, onCommand, allDevices = [], connections 
     ];
 
     const output = processCommand(input);
+    if (input.trim()) trackEvent('command_run', { cmd: input.trim().split(/\s+/)[0] });
     if (output) {
       newLines.push({ type: 'output', text: output });
     }

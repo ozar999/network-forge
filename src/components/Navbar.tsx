@@ -1,10 +1,16 @@
 import { Link } from '@tanstack/react-router';
 import { useState } from 'react';
 import { useTheme } from './ThemeProvider';
+import { useAuth, signOut } from '@/lib/auth';
+import { useProgress, xpToLevel } from '@/lib/progress';
 
 export function Navbar() {
   const { theme, toggle } = useTheme();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const { user } = useAuth();
+  const p = useProgress();
+  const lvl = xpToLevel(p.xp);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
   const links = [
     { to: '/' as const, label: 'Home' },
     { to: '/lab' as const, label: 'Lab' },
@@ -34,6 +40,36 @@ export function Navbar() {
         ))}
       </div>
       <div className="flex-1" />
+      {/* XP pill */}
+      <Link to="/dashboard" className="hidden sm:flex items-center gap-2 px-2 py-1 rounded border border-border bg-secondary/30 hover:border-terminal/40 text-[10px] mr-2" title="View dashboard">
+        <span className="text-terminal font-display">L{lvl.level}</span>
+        <span className="text-muted-foreground">·</span>
+        <span className="text-foreground">{p.xp} XP</span>
+      </Link>
+      {/* Auth */}
+      {user ? (
+        <div className="relative mr-2">
+          <button
+            onClick={() => setUserMenuOpen(o => !o)}
+            className="w-8 h-8 rounded-full border border-border bg-secondary/50 hover:border-terminal/50 flex items-center justify-center text-xs text-foreground"
+            title={user.name}
+          >{user.name.charAt(0).toUpperCase()}</button>
+          {userMenuOpen && (
+            <div className="absolute right-0 top-10 w-48 bg-card border border-border rounded shadow-lg p-1 z-50">
+              <div className="px-3 py-2 text-[10px] text-muted-foreground border-b border-border">
+                <div className="text-foreground text-xs">{user.name}</div>
+                {!user.isGuest && <div className="truncate">{user.email}</div>}
+                {user.isGuest && <div className="text-noc-yellow">Guest mode</div>}
+              </div>
+              <Link to="/dashboard" onClick={() => setUserMenuOpen(false)} className="block px-3 py-2 text-xs hover:bg-accent rounded">Dashboard</Link>
+              {user.isGuest && <Link to="/auth" onClick={() => setUserMenuOpen(false)} className="block px-3 py-2 text-xs text-terminal hover:bg-accent rounded">Create account</Link>}
+              <button onClick={() => { signOut(); setUserMenuOpen(false); }} className="w-full text-left px-3 py-2 text-xs text-noc-red hover:bg-accent rounded">Sign out</button>
+            </div>
+          )}
+        </div>
+      ) : (
+        <Link to="/auth" className="mr-2 px-3 py-1.5 text-xs rounded border border-terminal/40 text-terminal hover:bg-terminal/10">Sign in</Link>
+      )}
       <button
         onClick={toggle}
         aria-label="Toggle theme"
