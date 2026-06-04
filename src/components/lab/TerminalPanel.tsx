@@ -4,6 +4,7 @@ import { generateConnectedRoutes, simulatePing, simulateTraceroute, simulateDhcp
 
 import type { PingResult } from './PingResultPopup';
 import { processRouterCommand, getRouterPrompt, getRouterCompletions, type CliContext } from './cli/routerCommands';
+import { expandCiscoCommand, getSuggestions } from './cli/abbreviations';
 
 interface TerminalPanelProps {
   device: Device | null;
@@ -55,6 +56,9 @@ export function TerminalPanel({ device, onCommand, allDevices = [], connections 
   const [currentInterface, setCurrentInterface] = useState<string>('');
   const inputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [suggestionIndex, setSuggestionIndex] = useState(0);
+  const [showSuggestions, setShowSuggestions] = useState(false);
 
   const hostname = device?.hostname || device?.name || 'Router';
   const isPcLike = device?.type === 'pc' || device?.type === 'laptop';
@@ -82,8 +86,10 @@ export function TerminalPanel({ device, onCommand, allDevices = [], connections 
   }, [lines]);
 
   const processCommand = (cmd: string) => {
-    const trimmed = cmd.trim().toLowerCase();
-    const parts = cmd.trim().split(/\s+/);
+    // Expand Cisco abbreviations (en -> enable, sh ip int br -> show ip interface brief, ...)
+    const expanded = device ? expandCiscoCommand(cmd, device, mode) : cmd;
+    const trimmed = expanded.trim().toLowerCase();
+    const parts = expanded.trim().split(/\s+/);
     let output = '';
 
     if (trimmed === 'clear') {
@@ -117,7 +123,7 @@ export function TerminalPanel({ device, onCommand, allDevices = [], connections 
         setCurrentDhcpPool: () => {},
         setCurrentAcl: () => {},
       };
-      output = processRouterCommand(cmd, ctx);
+      output = processRouterCommand(expanded, ctx);
       if (output === '__CLEAR__') { setLines([]); return ''; }
     } else {
       output = '% No device selected';
@@ -313,7 +319,52 @@ export function TerminalPanel({ device, onCommand, allDevices = [], connections 
     setHistoryIndex(-1);
   };
 
+  // Recompute suggestions whenever input changes.
+  useEffect(() => {
+    if (!device || !input.trim()) {
+      setSuggestions([]);
+      setShowSuggestions(false);
+      return;
+    }
+    const next = getSuggestions(input, device, mode, 6);
+    setSuggestions(next);
+    setSuggestionIndex(0);
+    setShowSuggestions(next.length > 0);
+  }, [input, device, mode]);
+
+  const acceptSuggestion = (s: string) => {
+    const trailingSpace = /\s$/.test(input);
+    const tokens = input.trim().split(/\s+/).filter(Boolean);
+    const prefix = trailingSpace || tokens.length === 0 ? tokens.join(' ') : tokens.slice(0, -1).join(' ');
+    setInput((prefix ? prefix + ' ' : '') + s + ' ');
+    setShowSuggestions(false);
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (showSuggestions && suggestions.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setSuggestionIndex((i) => (i + 1) % suggestions.length);
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setSuggestionIndex((i) => (i - 1 + suggestions.length) % suggestions.length);
+        return;
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setShowSuggestions(false);
+        return;
+      }
+      if (e.key === 'Tab' || (e.key === 'Enter' && suggestions.length > 0 && input.trim() && !input.endsWith(' ') && suggestions[suggestionIndex]?.toLowerCase() !== input.trim().split(/\s+/).pop()?.toLowerCase())) {
+        if (e.key === 'Tab') {
+          e.preventDefault();
+          acceptSuggestion(suggestions[suggestionIndex]);
+          return;
+        }
+      }
+    }
     if (e.key === 'ArrowUp') {
       e.preventDefault();
       if (historyIndex < history.length - 1) {
@@ -333,17 +384,10 @@ export function TerminalPanel({ device, onCommand, allDevices = [], connections 
       }
     } else if (e.key === 'Tab') {
       e.preventDefault();
-      // Simple tab completion
-      const parts = input.trim().split(' ');
-      const prefix = parts.slice(0, -1).join(' ');
-      const partial = parts[parts.length - 1].toLowerCase();
-      const cmds = getCiscoCommands(device, mode);
-      const candidates = cmds[prefix] || cmds[''] || [];
-      const matches = candidates.filter(c => c.toLowerCase().startsWith(partial));
-      if (matches.length === 1) {
-        setInput(prefix ? `${prefix} ${matches[0]}` : matches[0]);
-      } else if (matches.length > 1) {
-        setLines(prev => [...prev, { type: 'output', text: matches.join('  ') }]);
+      if (suggestions.length === 1) {
+        acceptSuggestion(suggestions[0]);
+      } else if (suggestions.length > 1) {
+        acceptSuggestion(suggestions[suggestionIndex]);
       }
     }
   };
@@ -372,7 +416,7 @@ export function TerminalPanel({ device, onCommand, allDevices = [], connections 
             {line.text}
           </div>
         ))}
-        <form onSubmit={handleSubmit} className="flex items-center">
+        <form onSubmit={handleSubmit} className="flex items-center relative">
           <span className="text-terminal-bright mr-1">{getPrompt()}</span>
           <input
             ref={inputRef}
@@ -383,6 +427,23 @@ export function TerminalPanel({ device, onCommand, allDevices = [], connections 
             autoFocus
             spellCheck={false}
           />
+          {showSuggestions && suggestions.length > 0 && (
+            <div className="absolute bottom-full left-0 mb-1 min-w-[200px] max-w-[360px] bg-popover border border-border rounded-md shadow-lg z-50 overflow-hidden">
+              {suggestions.map((s, i) => (
+                <div
+                  key={s}
+                  onMouseDown={(ev) => { ev.preventDefault(); acceptSuggestion(s); }}
+                  className={`px-3 py-1 text-xs font-mono cursor-pointer ${
+                    i === suggestionIndex
+                      ? 'bg-terminal/20 text-terminal-bright'
+                      : 'text-foreground hover:bg-accent'
+                  }`}
+                >
+                  {s}
+                </div>
+              ))}
+            </div>
+          )}
         </form>
       </div>
     </div>
