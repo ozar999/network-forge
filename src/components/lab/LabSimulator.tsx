@@ -10,9 +10,12 @@ import { PingResultPopup, type PingResult } from './PingResultPopup';
 import { DeviceConfigPanel } from './DeviceConfigPanel';
 import type { Device } from './types';
 import { useNavigate } from '@tanstack/react-router';
+import { useEffect } from 'react';
+import { trackEvent } from '@/lib/progress';
 
 export function LabSimulator() {
   const lab = useLabState();
+  useEffect(() => { trackEvent('lab_open'); }, []);
   const [interfaceModal, setInterfaceModal] = useState<{ device: Device; step: 'from' | 'to'; fromIface?: string } | null>(null);
   const [desktopDevice, setDesktopDevice] = useState<Device | null>(null);
   const [pingResult, setPingResult] = useState<PingResult | null>(null);

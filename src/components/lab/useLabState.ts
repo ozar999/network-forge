@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import type { Device, Connection, Packet, DeviceType, SavedLab } from './types';
 import { DEVICE_DEFAULTS, generateMac, type NetworkInterface } from './types';
+import { trackEvent } from '@/lib/progress';
 
 let deviceCounter = 0;
 let connectionCounter = 0;
@@ -85,6 +86,7 @@ export function useLabState() {
   const addDevice = useCallback((type: DeviceType, x: number, y: number) => {
     const device = createDevice(type, x, y);
     setDevices(prev => [...prev, device]);
+    trackEvent('device_added', { type });
     return device;
   }, []);
 
@@ -172,6 +174,7 @@ export function useLabState() {
       }
       return d;
     }));
+    trackEvent('connection_made');
   }, [devices]);
 
   const startConnection = useCallback((deviceId: string) => {
@@ -281,6 +284,7 @@ export function useLabState() {
     const existing = JSON.parse(localStorage.getItem(LABS_KEY) || '[]') as SavedLab[];
     existing.push(lab);
     localStorage.setItem(LABS_KEY, JSON.stringify(existing));
+    trackEvent('topology_saved', { devices: devices.length });
   }, [devices, connections]);
 
   const loadTopology = useCallback(() => {
