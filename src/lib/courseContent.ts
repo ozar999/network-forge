@@ -6,6 +6,155 @@ export interface Lesson {
   readMinutes?: number;
 }
 
+// ============ Concept Architecture Diagrams (inline SVG) ============
+// All diagrams use currentColor + CSS variables so they adapt to themes.
+const SVG = (inner: string, w = 640, h = 280) =>
+  `<svg viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg" class="w-full h-auto" style="color:hsl(var(--foreground))">${inner}</svg>`;
+
+const OSI_DIAGRAM = SVG(`
+  <defs><linearGradient id="g1" x1="0" x2="1"><stop offset="0" stop-color="#22d3ee" stop-opacity=".25"/><stop offset="1" stop-color="#a855f7" stop-opacity=".25"/></linearGradient></defs>
+  ${[
+    ['7 · Application','HTTP, DNS, SMTP'],
+    ['6 · Presentation','TLS, encoding'],
+    ['5 · Session','Sessions, sockets'],
+    ['4 · Transport','TCP / UDP, ports'],
+    ['3 · Network','IP, routers'],
+    ['2 · Data Link','MAC, switches'],
+    ['1 · Physical','Cables, signals'],
+  ].map(([t, s], i) => `
+    <g transform="translate(40,${20 + i * 34})">
+      <rect width="560" height="28" rx="6" fill="url(#g1)" stroke="currentColor" stroke-opacity=".35"/>
+      <text x="14" y="19" font-family="ui-monospace,monospace" font-size="13" fill="currentColor">${t}</text>
+      <text x="560" y="19" text-anchor="end" font-size="11" fill="currentColor" opacity=".6" font-family="ui-sans-serif" dx="-12">${s}</text>
+    </g>`).join('')}
+`, 640, 280);
+
+const TCPIP_DIAGRAM = SVG(`
+  ${[
+    ['Application','HTTP · DNS · SSH','#a855f7'],
+    ['Transport','TCP · UDP','#22d3ee'],
+    ['Internet','IP · ICMP','#10b981'],
+    ['Link','Ethernet · Wi-Fi','#f59e0b'],
+  ].map(([t, s, c], i) => `
+    <g transform="translate(60,${30 + i * 52})">
+      <rect width="520" height="44" rx="8" fill="${c}" fill-opacity=".15" stroke="${c}" stroke-opacity=".5"/>
+      <text x="20" y="20" font-size="14" font-family="ui-monospace,monospace" fill="currentColor">${t}</text>
+      <text x="20" y="36" font-size="11" fill="currentColor" opacity=".6">${s}</text>
+    </g>`).join('')}
+  <g stroke="currentColor" stroke-opacity=".4" stroke-dasharray="4 3">
+    <path d="M 590 50 v 180" marker-end="url(#arr)"/>
+  </g>
+  <defs><marker id="arr" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker></defs>
+  <text x="600" y="140" font-size="10" fill="currentColor" opacity=".5" transform="rotate(90 600 140)">Encapsulation</text>
+`, 640, 260);
+
+const SUBNET_DIAGRAM = SVG(`
+  <text x="320" y="30" text-anchor="middle" font-size="14" font-family="ui-monospace,monospace" fill="currentColor">192.168.1.0 / 24</text>
+  ${Array.from({ length: 32 }, (_, i) => {
+    const isNet = i < 24;
+    const x = 40 + i * 17;
+    return `<g><rect x="${x}" y="60" width="14" height="36" rx="3" fill="${isNet ? '#22d3ee' : '#f59e0b'}" fill-opacity=".7"/><text x="${x + 7}" y="84" text-anchor="middle" font-size="10" fill="#000">${isNet ? '1' : '0'}</text></g>`;
+  }).join('')}
+  <text x="40" y="120" font-size="11" fill="currentColor" opacity=".7">← 24 network bits</text>
+  <text x="600" y="120" text-anchor="end" font-size="11" fill="currentColor" opacity=".7">8 host bits →</text>
+  <g transform="translate(60,160)">
+    <rect width="240" height="80" rx="8" fill="#22d3ee" fill-opacity=".1" stroke="#22d3ee" stroke-opacity=".5"/>
+    <text x="14" y="24" font-size="12" fill="currentColor">Network</text>
+    <text x="14" y="46" font-family="ui-monospace,monospace" font-size="13" fill="currentColor">192.168.1.0</text>
+    <text x="14" y="66" font-size="11" fill="currentColor" opacity=".6">Broadcast .255 · 254 usable</text>
+  </g>
+  <g transform="translate(340,160)">
+    <rect width="240" height="80" rx="8" fill="#f59e0b" fill-opacity=".1" stroke="#f59e0b" stroke-opacity=".5"/>
+    <text x="14" y="24" font-size="12" fill="currentColor">Hosts</text>
+    <text x="14" y="46" font-family="ui-monospace,monospace" font-size="13" fill="currentColor">.1 → .254</text>
+    <text x="14" y="66" font-size="11" fill="currentColor" opacity=".6">First and last reserved</text>
+  </g>
+`, 640, 260);
+
+const ARP_DIAGRAM = SVG(`
+  <g transform="translate(40,80)"><rect width="140" height="80" rx="10" fill="#22d3ee" fill-opacity=".15" stroke="#22d3ee" stroke-opacity=".5"/><text x="70" y="32" text-anchor="middle" font-size="12" fill="currentColor">Host A</text><text x="70" y="52" text-anchor="middle" font-size="11" font-family="ui-monospace,monospace" fill="currentColor">192.168.1.10</text><text x="70" y="68" text-anchor="middle" font-size="10" fill="currentColor" opacity=".6">aa:bb:cc:00:00:01</text></g>
+  <g transform="translate(460,80)"><rect width="140" height="80" rx="10" fill="#a855f7" fill-opacity=".15" stroke="#a855f7" stroke-opacity=".5"/><text x="70" y="32" text-anchor="middle" font-size="12" fill="currentColor">Host B</text><text x="70" y="52" text-anchor="middle" font-size="11" font-family="ui-monospace,monospace" fill="currentColor">192.168.1.1</text><text x="70" y="68" text-anchor="middle" font-size="10" fill="currentColor" opacity=".6">aa:bb:cc:00:00:02</text></g>
+  <g stroke="currentColor" fill="none">
+    <path d="M 180 100 C 280 60 360 60 460 100" stroke="#22d3ee" stroke-width="2" marker-end="url(#a1)"/>
+    <path d="M 460 140 C 360 180 280 180 180 140" stroke="#10b981" stroke-width="2" marker-end="url(#a2)"/>
+  </g>
+  <defs>
+    <marker id="a1" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#22d3ee"/></marker>
+    <marker id="a2" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#10b981"/></marker>
+  </defs>
+  <text x="320" y="50" text-anchor="middle" font-size="11" fill="currentColor" opacity=".8">1. Who has 192.168.1.1? (broadcast)</text>
+  <text x="320" y="210" text-anchor="middle" font-size="11" fill="currentColor" opacity=".8">2. I do — aa:bb:cc:00:00:02</text>
+`, 640, 260);
+
+const OSPF_DIAGRAM = SVG(`
+  ${[
+    [180, 80, 'R1'], [460, 80, 'R2'], [180, 200, 'R3'], [460, 200, 'R4'], [320, 140, 'R5'],
+  ].map(([x, y, n]) => `<g><circle cx="${x}" cy="${y}" r="28" fill="#22d3ee" fill-opacity=".15" stroke="#22d3ee" stroke-opacity=".6" stroke-width="2"/><text x="${x}" y="${(y as number) + 5}" text-anchor="middle" font-size="13" font-family="ui-monospace,monospace" fill="currentColor">${n}</text></g>`).join('')}
+  <g stroke="currentColor" stroke-opacity=".5" stroke-width="1.5" fill="none">
+    <line x1="208" y1="80" x2="432" y2="80"/>
+    <line x1="208" y1="200" x2="432" y2="200"/>
+    <line x1="180" y1="108" x2="180" y2="172"/>
+    <line x1="460" y1="108" x2="460" y2="172"/>
+    <line x1="200" y1="100" x2="295" y2="125"/>
+    <line x1="440" y1="100" x2="345" y2="125"/>
+    <line x1="200" y1="180" x2="295" y2="155"/>
+    <line x1="440" y1="180" x2="345" y2="155"/>
+  </g>
+  <text x="320" y="30" text-anchor="middle" font-size="13" fill="currentColor">Area 0 — Link-State Database</text>
+  <text x="320" y="260" text-anchor="middle" font-size="11" fill="currentColor" opacity=".6">Every router shares LSAs → builds identical topology graph → runs Dijkstra</text>
+`, 640, 280);
+
+const VLAN_DIAGRAM = SVG(`
+  <g transform="translate(180,30)"><rect width="280" height="60" rx="8" fill="#a855f7" fill-opacity=".15" stroke="#a855f7" stroke-opacity=".5"/><text x="140" y="36" text-anchor="middle" font-size="13" font-family="ui-monospace,monospace" fill="currentColor">Switch</text></g>
+  ${[
+    [60, 180, 'PC1', '#22d3ee', 'VLAN 10'],
+    [200, 180, 'PC2', '#22d3ee', 'VLAN 10'],
+    [360, 180, 'PC3', '#f59e0b', 'VLAN 20'],
+    [520, 180, 'PC4', '#f59e0b', 'VLAN 20'],
+  ].map(([x, y, n, c, v]) => `<g><rect x="${(x as number) - 30}" y="${y}" width="60" height="50" rx="6" fill="${c}" fill-opacity=".15" stroke="${c}" stroke-opacity=".6"/><text x="${x}" y="${(y as number) + 22}" text-anchor="middle" font-size="12" fill="currentColor">${n}</text><text x="${x}" y="${(y as number) + 40}" text-anchor="middle" font-size="9" fill="currentColor" opacity=".6">${v}</text><line x1="${x}" y1="${y}" x2="${(x as number) < 320 ? 250 : 390}" y2="90" stroke="${c}" stroke-opacity=".5"/></g>`).join('')}
+  <text x="320" y="270" text-anchor="middle" font-size="11" fill="currentColor" opacity=".6">One physical switch → two broadcast domains. PC1↔PC3 needs a router.</text>
+`, 640, 290);
+
+const NAT_DIAGRAM = SVG(`
+  <g transform="translate(30,90)"><rect width="180" height="80" rx="10" fill="#22d3ee" fill-opacity=".15" stroke="#22d3ee" stroke-opacity=".5"/><text x="90" y="28" text-anchor="middle" font-size="12" fill="currentColor">Private LAN</text><text x="90" y="50" text-anchor="middle" font-family="ui-monospace,monospace" font-size="11" fill="currentColor">10.0.0.10</text><text x="90" y="66" text-anchor="middle" font-family="ui-monospace,monospace" font-size="11" fill="currentColor">10.0.0.11</text></g>
+  <g transform="translate(260,90)"><rect width="120" height="80" rx="10" fill="#a855f7" fill-opacity=".15" stroke="#a855f7" stroke-opacity=".5"/><text x="60" y="32" text-anchor="middle" font-size="12" fill="currentColor">NAT Router</text><text x="60" y="56" text-anchor="middle" font-family="ui-monospace,monospace" font-size="10" fill="currentColor">203.0.113.5</text></g>
+  <g transform="translate(430,90)"><rect width="180" height="80" rx="10" fill="#10b981" fill-opacity=".15" stroke="#10b981" stroke-opacity=".5"/><text x="90" y="28" text-anchor="middle" font-size="12" fill="currentColor">Internet</text><text x="90" y="56" text-anchor="middle" font-size="11" fill="currentColor" opacity=".7">Sees only the public IP</text></g>
+  <g stroke="currentColor" stroke-opacity=".5" fill="none" marker-end="url(#a3)"><line x1="210" y1="130" x2="260" y2="130"/><line x1="380" y1="130" x2="430" y2="130"/></g>
+  <defs><marker id="a3" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker></defs>
+  <text x="320" y="220" text-anchor="middle" font-size="11" fill="currentColor" opacity=".6">PAT distinguishes flows by source port: 10.0.0.10:5000 ↔ 203.0.113.5:40001</text>
+`, 640, 250);
+
+const STP_DIAGRAM = SVG(`
+  <g><circle cx="320" cy="50" r="26" fill="#10b981" fill-opacity=".25" stroke="#10b981" stroke-width="2"/><text x="320" y="55" text-anchor="middle" font-size="12" fill="currentColor">Root</text></g>
+  ${[[150, 160, 'S2'], [490, 160, 'S3']].map(([x, y, n]) => `<g><circle cx="${x}" cy="${y}" r="24" fill="#22d3ee" fill-opacity=".15" stroke="#22d3ee" stroke-width="2"/><text x="${x}" y="${(y as number) + 5}" text-anchor="middle" font-size="12" fill="currentColor">${n}</text></g>`).join('')}
+  <g stroke="#10b981" stroke-width="2" fill="none"><line x1="300" y1="70" x2="170" y2="140"/><line x1="340" y1="70" x2="470" y2="140"/></g>
+  <g stroke="#ef4444" stroke-width="2" stroke-dasharray="6 4" fill="none"><line x1="170" y1="184" x2="470" y2="184"/></g>
+  <text x="320" y="220" text-anchor="middle" font-size="11" fill="#ef4444" opacity=".8">Blocked port — prevents the loop</text>
+  <text x="320" y="245" text-anchor="middle" font-size="11" fill="currentColor" opacity=".6">Root bridge = lowest priority + MAC. Non-roots pick their best path; redundant links block.</text>
+`, 640, 270);
+
+const WIFI_DIAGRAM = SVG(`
+  <g transform="translate(280,30)"><rect width="80" height="50" rx="8" fill="#a855f7" fill-opacity=".15" stroke="#a855f7" stroke-opacity=".6"/><text x="40" y="30" text-anchor="middle" font-size="12" fill="currentColor">AP</text></g>
+  ${[[80, 180], [220, 180], [400, 180], [540, 180]].map(([x, y], i) => `<g><rect x="${(x as number) - 30}" y="${y}" width="60" height="45" rx="6" fill="#22d3ee" fill-opacity=".15" stroke="#22d3ee" stroke-opacity=".5"/><text x="${x}" y="${(y as number) + 26}" text-anchor="middle" font-size="11" fill="currentColor">STA${i + 1}</text></g>`).join('')}
+  <g stroke="#a855f7" stroke-opacity=".4" stroke-dasharray="3 3" fill="none">${[80, 220, 400, 540].map(x => `<line x1="320" y1="80" x2="${x}" y2="180"/>`).join('')}</g>
+  ${[120, 150, 180].map(r => `<circle cx="320" cy="80" r="${r}" fill="none" stroke="#a855f7" stroke-opacity=".${30 - (r - 120) / 4}"/>`).join('')}
+  <text x="320" y="260" text-anchor="middle" font-size="11" fill="currentColor" opacity=".6">SSID broadcast · WPA2/WPA3 handshake · clients associate with the AP</text>
+`, 640, 280);
+
+const PING_DIAGRAM = SVG(`
+  <g transform="translate(40,100)"><rect width="120" height="60" rx="8" fill="#22d3ee" fill-opacity=".15" stroke="#22d3ee" stroke-opacity=".5"/><text x="60" y="36" text-anchor="middle" font-size="12" fill="currentColor">Source</text></g>
+  <g transform="translate(260,100)"><rect width="120" height="60" rx="8" fill="#a855f7" fill-opacity=".15" stroke="#a855f7" stroke-opacity=".5"/><text x="60" y="36" text-anchor="middle" font-size="12" fill="currentColor">Router</text></g>
+  <g transform="translate(480,100)"><rect width="120" height="60" rx="8" fill="#10b981" fill-opacity=".15" stroke="#10b981" stroke-opacity=".5"/><text x="60" y="36" text-anchor="middle" font-size="12" fill="currentColor">Target</text></g>
+  <g stroke="#22d3ee" stroke-width="2" fill="none" marker-end="url(#aE)"><line x1="160" y1="120" x2="260" y2="120"/><line x1="380" y1="120" x2="480" y2="120"/></g>
+  <g stroke="#10b981" stroke-width="2" fill="none" stroke-dasharray="4 4" marker-end="url(#aE2)"><line x1="480" y1="145" x2="380" y2="145"/><line x1="260" y1="145" x2="160" y2="145"/></g>
+  <defs>
+    <marker id="aE" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#22d3ee"/></marker>
+    <marker id="aE2" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#10b981"/></marker>
+  </defs>
+  <text x="210" y="90" text-anchor="middle" font-size="10" fill="currentColor" opacity=".7">ICMP echo →</text>
+  <text x="430" y="180" text-anchor="middle" font-size="10" fill="currentColor" opacity=".7">← echo reply</text>
+`, 640, 230);
+
 export interface Quiz {
   id: string;
   question: string;
