@@ -116,8 +116,23 @@ export function LabSimulator() {
         onLoad={lab.loadTopology}
         onClear={lab.clearWorkspace}
         connectingFrom={lab.connectingFrom}
+        deviceCount={lab.devices.length}
+        connectionCount={lab.connections.length}
       />
       <div className="relative flex-1 min-h-0">
+        {/* Empty-state hint */}
+        {lab.devices.length === 0 && (
+          <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center z-10">
+            <div className="text-center px-6 py-8 rounded-2xl border border-dashed border-terminal/30 bg-card/40 backdrop-blur-sm max-w-md">
+              <div className="text-3xl mb-2">🧪</div>
+              <h3 className="text-sm font-display text-terminal tracking-wider mb-1">EMPTY LAB</h3>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                Drag a device from the top toolbar onto the canvas to begin.<br />
+                Click two devices in turn to link them, double-click any device for its CLI or desktop.
+              </p>
+            </div>
+          </div>
+        )}
         {/* Full-width canvas */}
           <TopologyCanvas
             devices={lab.devices}
