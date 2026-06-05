@@ -2,6 +2,8 @@ export interface Lesson {
   id: string;
   title: string;
   body: string; // markdown-ish
+  diagram?: string; // inline SVG markup — concept architecture for this lesson
+  readMinutes?: number;
 }
 
 export interface Quiz {
