@@ -55,7 +55,9 @@ function renderBody(md: string) {
 }
 
 function CourseReader() {
+  console.log("CourseReader loaded");
   const { courseId } = Route.useParams();
+  console.log("courseId:", courseId);
   const navigate = useNavigate();
   const course = useMemo(() => getCourse(courseId), [courseId]);
   const [activeLessonId, setActiveLessonId] = useState<string | null>(course?.lessons[0]?.id || null);
