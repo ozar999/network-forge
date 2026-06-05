@@ -212,8 +212,8 @@ export const COURSES: CourseDef[] = [
     topics: ['Static Routing', 'OSPF', 'VLANs', 'Trunking'],
     lessons: [
       { id: 'static', title: 'Static Routing', body: `# Static Routing\n\nManually configure a path:\n\n\`\`\`\nip route 10.0.2.0 255.255.255.0 10.0.1.2\n\`\`\`\n\nUse when topology is small and stable.` },
-      { id: 'ospf', title: 'OSPF Basics', body: `# OSPF\n\n**Open Shortest Path First** is a link-state IGP. Routers exchange LSAs and run **Dijkstra** to compute the shortest path.\n\n\`\`\`\nrouter ospf 1\n network 10.0.0.0 0.0.0.255 area 0\n\`\`\`\n\n## Neighbor states\nDown → Init → 2-Way → ExStart → Exchange → Loading → **Full**` },
-      { id: 'vlans', title: 'VLANs', body: `# VLANs\n\nA **VLAN** segments a switch into multiple broadcast domains.\n\n\`\`\`\nvlan 10\n name SALES\ninterface FastEthernet0/1\n switchport mode access\n switchport access vlan 10\n\`\`\`` },
+      { id: 'ospf', title: 'OSPF Basics', diagram: OSPF_DIAGRAM, readMinutes: 6, body: `# OSPF\n\n**Open Shortest Path First** is a link-state IGP. Routers exchange LSAs and run **Dijkstra** to compute the shortest path.\n\n\`\`\`\nrouter ospf 1\n network 10.0.0.0 0.0.0.255 area 0\n\`\`\`\n\n## Neighbor states\nDown → Init → 2-Way → ExStart → Exchange → Loading → **Full**` },
+      { id: 'vlans', title: 'VLANs', diagram: VLAN_DIAGRAM, readMinutes: 5, body: `# VLANs\n\nA **VLAN** segments a switch into multiple broadcast domains.\n\n\`\`\`\nvlan 10\n name SALES\ninterface FastEthernet0/1\n switchport mode access\n switchport access vlan 10\n\`\`\`` },
       { id: 'trunk', title: 'Trunking (802.1Q)', body: `# 802.1Q Trunking\n\nA **trunk port** carries traffic for multiple VLANs by tagging each frame.\n\n\`\`\`\ninterface GigabitEthernet0/1\n switchport mode trunk\n switchport trunk allowed vlan 10,20,30\n\`\`\`` },
     ],
     quiz: [
@@ -230,7 +230,7 @@ export const COURSES: CourseDef[] = [
     topics: ['ACLs', 'NAT', 'Firewall Rules', 'Hardening'],
     lessons: [
       { id: 'acls', title: 'Access Control Lists', body: `# ACLs\n\nFilter traffic based on source, destination, protocol, port.\n\n\`\`\`\nip access-list extended BLOCK_TELNET\n deny tcp any any eq 23\n permit ip any any\n\`\`\`` },
-      { id: 'nat', title: 'NAT & PAT', body: `# NAT\n\n**NAT** translates private IPs to public IPs. **PAT** (overload) shares one public IP across many internal hosts using ports.\n\n\`\`\`\nip nat inside source list 1 interface gi0/1 overload\n\`\`\`` },
+      { id: 'nat', title: 'NAT & PAT', diagram: NAT_DIAGRAM, readMinutes: 4, body: `# NAT\n\n**NAT** translates private IPs to public IPs. **PAT** (overload) shares one public IP across many internal hosts using ports.\n\n\`\`\`\nip nat inside source list 1 interface gi0/1 overload\n\`\`\`` },
       { id: 'harden', title: 'Device Hardening', body: `# Hardening\n\n- \`service password-encryption\`\n- \`enable secret <strong>\`\n- \`no ip http server\`\n- \`no cdp run\` on untrusted ports\n- Restrict VTY: \`access-class\` + \`transport input ssh\`` },
     ],
     quiz: [
@@ -246,7 +246,7 @@ export const COURSES: CourseDef[] = [
     topics: ['802.11', 'SSID', 'WPA2/WPA3', 'Channels'],
     lessons: [
       { id: '802-11', title: '802.11 Standards', body: `# 802.11 Family\n\n- **a/g**: legacy, 54 Mbps\n- **n**: up to 600 Mbps, MIMO\n- **ac (Wi-Fi 5)**: 1+ Gbps, 5 GHz\n- **ax (Wi-Fi 6)**: 9.6 Gbps, OFDMA\n- **be (Wi-Fi 7)**: multi-link operation` },
-      { id: 'security', title: 'WiFi Security', body: `# WiFi Security\n\n- WEP: broken, never use\n- WPA: deprecated\n- **WPA2-PSK**: AES, still common\n- **WPA3**: SAE handshake, forward secrecy` },
+      { id: 'security', title: 'WiFi Security', diagram: WIFI_DIAGRAM, readMinutes: 4, body: `# WiFi Security\n\n- WEP: broken, never use\n- WPA: deprecated\n- **WPA2-PSK**: AES, still common\n- **WPA3**: SAE handshake, forward secrecy` },
     ],
     quiz: [
       { id: 'q1', question: 'WPA3 uses which handshake?', options: ['4-way', 'TKIP', 'SAE', 'EAP-TLS'], answer: 2 },
@@ -261,7 +261,7 @@ export const COURSES: CourseDef[] = [
     topics: ['Ping', 'Traceroute', 'show commands', 'Methodology'],
     lessons: [
       { id: 'method', title: 'Methodology', body: `# Top-Down vs Bottom-Up\n\n- **Bottom-up**: start at Layer 1 (cable, link lights) and work up.\n- **Top-down**: start at the app and work down.\n- **Divide & conquer**: ping a midpoint to isolate.` },
-      { id: 'ping', title: 'Ping', body: `# Ping\n\nSends **ICMP echo requests**. Reply means full L3 reachability + return path.\n\n- "Request timed out" → no reply (could be firewall)\n- "Destination unreachable" → router has no route` },
+      { id: 'ping', title: 'Ping', diagram: PING_DIAGRAM, readMinutes: 3, body: `# Ping\n\nSends **ICMP echo requests**. Reply means full L3 reachability + return path.\n\n- "Request timed out" → no reply (could be firewall)\n- "Destination unreachable" → router has no route` },
       { id: 'trace', title: 'Traceroute', body: `# Traceroute\n\nIncrements TTL each hop to discover the path. Each hop returns **ICMP TTL exceeded**.` },
     ],
     quiz: [
@@ -277,7 +277,7 @@ export const COURSES: CourseDef[] = [
     topics: ['IPv4/IPv6', 'OSPFv2', 'EtherChannel', 'STP', 'NAT', 'Wireless', 'Security', 'Automation'],
     lessons: [
       { id: 'ipv6', title: 'IPv6 Essentials', body: `# IPv6\n\n128-bit addresses. Compress runs of zeros with \`::\` once.\n\n\`\`\`\n2001:0db8:0000:0000:0000:0000:0000:0001\n→ 2001:db8::1\n\`\`\`\n\n**Link-local**: fe80::/10` },
-      { id: 'stp', title: 'Spanning Tree', body: `# Spanning Tree Protocol\n\nPrevents loops in switched networks. Elects a **root bridge** (lowest priority/MAC), each non-root selects a **root port** and blocks redundant links.` },
+      { id: 'stp', title: 'Spanning Tree', diagram: STP_DIAGRAM, readMinutes: 5, body: `# Spanning Tree Protocol\n\nPrevents loops in switched networks. Elects a **root bridge** (lowest priority/MAC), each non-root selects a **root port** and blocks redundant links.` },
       { id: 'etherchannel', title: 'EtherChannel', body: `# EtherChannel\n\nBundles multiple physical links into one logical link. Protocols: **LACP** (standard), **PAgP** (Cisco).` },
       { id: 'review', title: 'Exam Tips', body: `# Exam Tips\n\n- Know the IPv4 header fields\n- Memorize port numbers: 20/21 FTP, 22 SSH, 23 Telnet, 25 SMTP, 53 DNS, 80 HTTP, 443 HTTPS\n- Practice subnetting until under 30 sec/question\n- Lab everything in NetSem` },
     ],
