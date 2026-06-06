@@ -148,7 +148,7 @@ async function pushToCloud() {
       quizzes: p.quizzes,
       notes: p.notes,
       achievements: p.achievements,
-      events: p.events.slice(0, 200),
+      events: p.events.slice(0, 200) as unknown as never,
     });
   } catch (e) {
     console.warn('[progress] cloud sync failed', e);
@@ -171,7 +171,7 @@ export async function loadFromCloud() {
       quizzes: (data.quizzes as Progress['quizzes']) ?? {},
       notes: (data.notes as Progress['notes']) ?? {},
       achievements: (data.achievements as string[]) ?? [],
-      events: (data.events as ActivityEvent[]) ?? [],
+      events: (data.events as unknown as ActivityEvent[]) ?? [],
     };
     const base = remote.xp >= local.xp ? remote : local;
     const seen = new Set<string>();
