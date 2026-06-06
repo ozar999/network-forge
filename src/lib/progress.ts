@@ -197,6 +197,20 @@ if (typeof window !== 'undefined') {
   setTimeout(() => { loadFromCloud(); }, 100);
 }
 
+export async function recordLabCompletion(labTitle: string, durationSeconds: number, skills: string[]) {
+  if (typeof window === 'undefined') return { ok: false, error: 'no-window' };
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: 'not-signed-in' };
+  const { error } = await supabase.from('lab_completions').insert({
+    user_id: user.id,
+    lab_title: labTitle,
+    duration_seconds: Math.max(0, Math.floor(durationSeconds)),
+    skills,
+  });
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
+}
+
 // ---------- Public API ----------
 export function trackEvent(type: ActivityType, meta?: Record<string, string | number>) {
   const xp = XP_TABLE[type] ?? 0;
