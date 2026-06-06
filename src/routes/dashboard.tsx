@@ -40,6 +40,7 @@ function DashboardPage() {
     })();
   }, [user]);
 
+  const p = useProgress();
   if (loading || !user || user.isGuest) {
     return (
       <div className="min-h-[calc(100vh-3.5rem)] flex items-center justify-center text-muted-foreground text-sm">
@@ -47,8 +48,6 @@ function DashboardPage() {
       </div>
     );
   }
-
-  const p = useProgress();
   const lvl = xpToLevel(p.xp);
   const streak = computeStreak(p);
   const daily = getDailyXp(p, 30);
