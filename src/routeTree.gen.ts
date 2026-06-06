@@ -48,9 +48,9 @@ const CoursesIndexRoute = CoursesIndexRouteImport.update({
   getParentRoute: () => rootRouteImport,
 } as any)
 const CoursesCourseIdRoute = CoursesCourseIdRouteImport.update({
-  id: '/$courseId',
-  path: '/$courseId',
-  getParentRoute: () => CoursesRoute,
+  id: '/courses/$courseId',
+  path: '/courses/$courseId',
+  getParentRoute: () => rootRouteImport,
 } as any)
 
 export interface FileRoutesByFullPath {
@@ -117,6 +117,7 @@ export interface RootRouteChildren {
   AuthRoute: typeof AuthRoute
   DashboardRoute: typeof DashboardRoute
   LabRoute: typeof LabRoute
+  CoursesCourseIdRoute: typeof CoursesCourseIdRoute
   CoursesIndexRoute: typeof CoursesIndexRoute
 }
 
@@ -166,10 +167,10 @@ declare module '@tanstack/react-router' {
     }
     '/courses/$courseId': {
       id: '/courses/$courseId'
-      path: '/$courseId'
+      path: '/courses/$courseId'
       fullPath: '/courses/$courseId'
       preLoaderRoute: typeof CoursesCourseIdRouteImport
-      parentRoute: typeof CoursesRoute
+      parentRoute: typeof rootRouteImport
     }
   }
 }
@@ -180,17 +181,9 @@ const rootRouteChildren: RootRouteChildren = {
   AuthRoute: AuthRoute,
   DashboardRoute: DashboardRoute,
   LabRoute: LabRoute,
+  CoursesCourseIdRoute: CoursesCourseIdRoute,
   CoursesIndexRoute: CoursesIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { createStart } from '@tanstack/react-start'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-  }
-}
