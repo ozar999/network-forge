@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
+import { supabase } from '@/integrations/supabase/client';
 
 // ---------- Types ----------
 export type ActivityType =
@@ -121,6 +122,93 @@ function update(fn: (p: Progress) => Progress) {
   current = next;
   save(next);
   emit();
+  scheduleCloudSync();
+}
+
+// ---------- Cloud sync ----------
+let syncTimer: ReturnType<typeof setTimeout> | null = null;
+let cloudReady = false;
+
+function scheduleCloudSync() {
+  if (typeof window === 'undefined') return;
+  if (syncTimer) clearTimeout(syncTimer);
+  syncTimer = setTimeout(pushToCloud, 1500);
+}
+
+async function pushToCloud() {
+  syncTimer = null;
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    const p = get();
+    await supabase.from('user_progress').upsert({
+      user_id: user.id,
+      xp: p.xp,
+      lessons: p.lessons,
+      quizzes: p.quizzes,
+      notes: p.notes,
+      achievements: p.achievements,
+      events: p.events.slice(0, 200) as unknown as never,
+    });
+  } catch (e) {
+    console.warn('[progress] cloud sync failed', e);
+  }
+}
+
+export async function loadFromCloud() {
+  if (typeof window === 'undefined' || cloudReady) return;
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    const { data, error } = await supabase
+      .from('user_progress').select('*').eq('user_id', user.id).maybeSingle();
+    if (error || !data) return;
+    const local = get();
+    // Merge: take whichever has more XP as base, then union events
+    const remote: Progress = {
+      xp: data.xp ?? 0,
+      lessons: (data.lessons as Progress['lessons']) ?? {},
+      quizzes: (data.quizzes as Progress['quizzes']) ?? {},
+      notes: (data.notes as Progress['notes']) ?? {},
+      achievements: (data.achievements as string[]) ?? [],
+      events: (data.events as unknown as ActivityEvent[]) ?? [],
+    };
+    const base = remote.xp >= local.xp ? remote : local;
+    const seen = new Set<string>();
+    const events = [...base.events, ...(base === remote ? local.events : remote.events)]
+      .filter(e => { if (seen.has(e.id)) return false; seen.add(e.id); return true; })
+      .sort((a, b) => b.ts - a.ts)
+      .slice(0, MAX_EVENTS);
+    current = { ...base, events };
+    save(current);
+    cloudReady = true;
+    emit();
+  } catch (e) {
+    console.warn('[progress] cloud load failed', e);
+  }
+}
+
+if (typeof window !== 'undefined') {
+  supabase.auth.onAuthStateChange((event) => {
+    if (event === 'SIGNED_IN') { cloudReady = false; loadFromCloud(); }
+    if (event === 'SIGNED_OUT') { cloudReady = false; }
+  });
+  // Initial load if already signed in
+  setTimeout(() => { loadFromCloud(); }, 100);
+}
+
+export async function recordLabCompletion(labTitle: string, durationSeconds: number, skills: string[]) {
+  if (typeof window === 'undefined') return { ok: false, error: 'no-window' };
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: 'not-signed-in' };
+  const { error } = await supabase.from('lab_completions').insert({
+    user_id: user.id,
+    lab_title: labTitle,
+    duration_seconds: Math.max(0, Math.floor(durationSeconds)),
+    skills,
+  });
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
 }
 
 // ---------- Public API ----------

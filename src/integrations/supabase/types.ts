@@ -14,7 +14,90 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      lab_completions: {
+        Row: {
+          completed_at: string
+          duration_seconds: number
+          id: string
+          lab_title: string
+          skills: string[]
+          user_id: string
+        }
+        Insert: {
+          completed_at?: string
+          duration_seconds?: number
+          id?: string
+          lab_title: string
+          skills?: string[]
+          user_id: string
+        }
+        Update: {
+          completed_at?: string
+          duration_seconds?: number
+          id?: string
+          lab_title?: string
+          skills?: string[]
+          user_id?: string
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          avatar_url: string | null
+          created_at: string
+          display_name: string | null
+          id: string
+          updated_at: string
+        }
+        Insert: {
+          avatar_url?: string | null
+          created_at?: string
+          display_name?: string | null
+          id: string
+          updated_at?: string
+        }
+        Update: {
+          avatar_url?: string | null
+          created_at?: string
+          display_name?: string | null
+          id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      user_progress: {
+        Row: {
+          achievements: Json
+          events: Json
+          lessons: Json
+          notes: Json
+          quizzes: Json
+          updated_at: string
+          user_id: string
+          xp: number
+        }
+        Insert: {
+          achievements?: Json
+          events?: Json
+          lessons?: Json
+          notes?: Json
+          quizzes?: Json
+          updated_at?: string
+          user_id: string
+          xp?: number
+        }
+        Update: {
+          achievements?: Json
+          events?: Json
+          lessons?: Json
+          notes?: Json
+          quizzes?: Json
+          updated_at?: string
+          user_id?: string
+          xp?: number
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

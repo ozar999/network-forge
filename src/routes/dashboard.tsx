@@ -1,9 +1,9 @@
-import { createFileRoute } from '@tanstack/react-router';
-import { Link } from '@tanstack/react-router';
-import React from 'react';
+import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
+import React, { useEffect, useState } from 'react';
 import { useProgress, xpToLevel, computeStreak, getDailyXp, getHeatmap, ACHIEVEMENTS } from '@/lib/progress';
 import { useAuth } from '@/lib/auth';
 import { COURSES } from '@/lib/courseContent';
+import { supabase } from '@/integrations/supabase/client';
 
 export const Route = createFileRoute('/dashboard')({
   head: () => ({
@@ -16,8 +16,38 @@ export const Route = createFileRoute('/dashboard')({
 });
 
 function DashboardPage() {
-  const { user } = useAuth();
+  const { user, loading } = useAuth();
+  const navigate = useNavigate();
+  useEffect(() => {
+    if (!loading && (!user || user.isGuest)) {
+      navigate({ to: '/auth' });
+    }
+  }, [user, loading, navigate]);
+
+  const [cloudStats, setCloudStats] = useState<{ labsCompleted: number; hoursSpent: number; skillsUnlocked: number } | null>(null);
+  useEffect(() => {
+    if (!user || user.isGuest) return;
+    (async () => {
+      const { data } = await supabase
+        .from('lab_completions')
+        .select('duration_seconds, skills')
+        .eq('user_id', user.id);
+      if (!data) return;
+      const labsCompleted = data.length;
+      const hoursSpent = Math.round((data.reduce((a, r) => a + (r.duration_seconds || 0), 0) / 3600) * 10) / 10;
+      const skillsUnlocked = new Set(data.flatMap(r => r.skills || [])).size;
+      setCloudStats({ labsCompleted, hoursSpent, skillsUnlocked });
+    })();
+  }, [user]);
+
   const p = useProgress();
+  if (loading || !user || user.isGuest) {
+    return (
+      <div className="min-h-[calc(100vh-3.5rem)] flex items-center justify-center text-muted-foreground text-sm">
+        Loading…
+      </div>
+    );
+  }
   const lvl = xpToLevel(p.xp);
   const streak = computeStreak(p);
   const daily = getDailyXp(p, 30);
@@ -58,7 +88,7 @@ function DashboardPage() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
         {[
           { label: 'Total XP', value: p.xp, icon: '⚡' },
           { label: 'Streak', value: `${streak} day${streak === 1 ? '' : 's'}`, icon: '🔥' },
@@ -69,6 +99,21 @@ function DashboardPage() {
             <span className="text-2xl">{s.icon}</span>
             <div className="text-xl font-display text-terminal mt-2">{s.value}</div>
             <div className="text-[10px] text-muted-foreground mt-1 uppercase tracking-wider">{s.label}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Cloud stats */}
+      <div className="grid grid-cols-3 gap-4 mb-8">
+        {[
+          { label: 'Labs Completed', value: cloudStats?.labsCompleted ?? '—', icon: '🧪' },
+          { label: 'Hours Spent', value: cloudStats?.hoursSpent ?? '—', icon: '⏱️' },
+          { label: 'Skills Unlocked', value: cloudStats?.skillsUnlocked ?? '—', icon: '🛠️' },
+        ].map(s => (
+          <div key={s.label} className="border border-terminal/30 rounded-lg p-4 bg-terminal/5 text-center">
+            <span className="text-2xl">{s.icon}</span>
+            <div className="text-xl font-display text-terminal mt-2">{s.value}</div>
+            <div className="text-[10px] text-muted-foreground mt-1 uppercase tracking-wider">{s.label} (Cloud)</div>
           </div>
         ))}
       </div>
