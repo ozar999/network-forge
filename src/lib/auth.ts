@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react';
+import { supabase } from '@/integrations/supabase/client';
+import { lovable } from '@/integrations/lovable';
 import { trackEvent } from './progress';
 
 export interface User {
@@ -7,61 +9,75 @@ export interface User {
   name: string;
   createdAt: number;
   isGuest: boolean;
+  avatarUrl?: string;
 }
 
-const USER_KEY = 'netsem_user';
-const USERS_KEY = 'netsem_users'; // local mock "directory"
+const GUEST_KEY = 'netsem_guest';
+const listeners = new Set<(u: User | null) => void>();
+let current: User | null = null;
 
-const listeners = new Set<() => void>();
-function emit() { for (const l of listeners) l(); }
+function emit() { for (const l of listeners) l(current); }
 
-function load(): User | null {
+function fromSession(session: { user: { id: string; email?: string | null; user_metadata?: Record<string, unknown>; created_at?: string } } | null): User | null {
+  if (!session?.user) return null;
+  const u = session.user;
+  const meta = (u.user_metadata || {}) as Record<string, string>;
+  return {
+    id: u.id,
+    email: u.email || '',
+    name: meta.full_name || meta.name || (u.email ? u.email.split('@')[0] : 'User'),
+    avatarUrl: meta.avatar_url,
+    createdAt: u.created_at ? new Date(u.created_at).getTime() : Date.now(),
+    isGuest: false,
+  };
+}
+
+function loadGuest(): User | null {
   if (typeof window === 'undefined') return null;
   try {
-    const raw = localStorage.getItem(USER_KEY);
+    const raw = localStorage.getItem(GUEST_KEY);
     return raw ? (JSON.parse(raw) as User) : null;
   } catch { return null; }
 }
-function save(u: User | null) {
-  if (!u) localStorage.removeItem(USER_KEY);
-  else localStorage.setItem(USER_KEY, JSON.stringify(u));
-  emit();
-}
-function loadUsers(): Record<string, { password: string; user: User }> {
-  try {
-    const raw = localStorage.getItem(USERS_KEY);
-    return raw ? JSON.parse(raw) : {};
-  } catch { return {}; }
-}
-function saveUsers(d: Record<string, { password: string; user: User }>) {
-  localStorage.setItem(USERS_KEY, JSON.stringify(d));
+
+// Initialise session on the client
+if (typeof window !== 'undefined') {
+  supabase.auth.getSession().then(({ data }) => {
+    current = fromSession(data.session as never) ?? loadGuest();
+    emit();
+  });
+  supabase.auth.onAuthStateChange((event, session) => {
+    if (session) localStorage.removeItem(GUEST_KEY);
+    current = fromSession(session as never) ?? loadGuest();
+    emit();
+    if (event === 'SIGNED_IN') trackEvent('login');
+  });
 }
 
-export function signUp(email: string, password: string, name: string): { ok: boolean; error?: string; user?: User } {
-  const users = loadUsers();
-  const key = email.toLowerCase().trim();
-  if (!key || !password || !name) return { ok: false, error: 'All fields required.' };
-  if (users[key]) return { ok: false, error: 'Account already exists.' };
-  const user: User = {
-    id: `u-${Date.now()}`, email: key, name: name.trim(),
-    createdAt: Date.now(), isGuest: false,
-  };
-  users[key] = { password, user };
-  saveUsers(users);
-  save(user);
-  trackEvent('login');
-  return { ok: true, user };
+export async function signUp(email: string, password: string, name: string): Promise<{ ok: boolean; error?: string }> {
+  const redirectTo = typeof window !== 'undefined' ? `${window.location.origin}/dashboard` : undefined;
+  const { error } = await supabase.auth.signUp({
+    email: email.trim(),
+    password,
+    options: { data: { full_name: name.trim() }, emailRedirectTo: redirectTo },
+  });
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
 }
 
-export function signIn(email: string, password: string): { ok: boolean; error?: string; user?: User } {
-  const users = loadUsers();
-  const key = email.toLowerCase().trim();
-  const rec = users[key];
-  if (!rec) return { ok: false, error: 'Account not found.' };
-  if (rec.password !== password) return { ok: false, error: 'Wrong password.' };
-  save(rec.user);
-  trackEvent('login');
-  return { ok: true, user: rec.user };
+export async function signIn(email: string, password: string): Promise<{ ok: boolean; error?: string }> {
+  const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
+}
+
+export async function signInWithGoogle(): Promise<{ ok: boolean; error?: string; redirected?: boolean }> {
+  const result = await lovable.auth.signInWithOAuth('google', {
+    redirect_uri: typeof window !== 'undefined' ? window.location.origin + '/dashboard' : undefined,
+  });
+  if (result.error) return { ok: false, error: result.error.message };
+  if (result.redirected) return { ok: true, redirected: true };
+  return { ok: true };
 }
 
 export function signInGuest(): User {
@@ -69,20 +85,30 @@ export function signInGuest(): User {
     id: `g-${Date.now()}`, email: 'guest@netsem.local', name: 'Guest',
     createdAt: Date.now(), isGuest: true,
   };
-  save(user);
+  if (typeof window !== 'undefined') localStorage.setItem(GUEST_KEY, JSON.stringify(user));
+  current = user;
+  emit();
   return user;
 }
 
-export function signOut() {
-  save(null);
+export async function signOut() {
+  if (typeof window !== 'undefined') localStorage.removeItem(GUEST_KEY);
+  await supabase.auth.signOut();
+  current = null;
+  emit();
 }
 
-export function useAuth(): { user: User | null } {
-  const [user, setUser] = useState<User | null>(() => load());
+export function useAuth(): { user: User | null; loading: boolean } {
+  const [user, setUser] = useState<User | null>(current);
+  const [loading, setLoading] = useState<boolean>(current === null);
   useEffect(() => {
-    const l = () => setUser(load());
+    const l = (u: User | null) => { setUser(u); setLoading(false); };
     listeners.add(l);
+    // Trigger initial check if needed
+    if (typeof window !== 'undefined') {
+      supabase.auth.getSession().then(() => setLoading(false));
+    }
     return () => { listeners.delete(l); };
   }, []);
-  return { user };
+  return { user, loading };
 }
