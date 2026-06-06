@@ -203,7 +203,7 @@ export function TopologyCanvas({
   return (
     <div
       ref={canvasRef}
-      className={`relative flex-1 overflow-hidden ${isPanning || spaceHeld ? 'cursor-grab' : 'cursor-crosshair'}`}
+      className={`absolute inset-0 overflow-hidden ${isPanning || spaceHeld ? 'cursor-grab' : 'cursor-crosshair'}`}
       style={{ userSelect: 'none' }}
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
