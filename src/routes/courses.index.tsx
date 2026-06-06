@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import { COURSES } from '@/lib/courseContent';
 import { useProgress } from '@/lib/progress';
 
-export const Route = createFileRoute('/courses')({
+export const Route = createFileRoute('/courses/')({
   head: () => ({
     meta: [
       { title: 'Courses — NetSem' },
