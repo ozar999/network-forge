@@ -1,0 +1,101 @@
+name: Ubuntu Server + Auto Deploy Network Forge
+
+on:
+  workflow_dispatch:
+
+jobs:
+  ubuntu-server:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Update System
+        run: |
+          sudo apt update
+          sudo apt install -y openssh-server curl git nginx
+
+      - name: Install Node.js 22
+        run: |
+          curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
+          sudo apt install -y nodejs
+          node -v
+          npm -v
+
+      - name: Configure SSH
+        run: |
+          sudo sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config
+          echo "runner:ABdo12!@" | sudo chpasswd
+          sudo service ssh restart
+
+      - name: Install Project Dependencies
+        run: |
+          npm install
+
+      - name: Build Project
+        run: |
+          npm run build
+
+      - name: Install PM2
+        run: |
+          sudo npm install -g pm2
+
+      - name: Start Website
+        run: |
+          pm2 start "npm run preview -- --host 0.0.0.0 --port 3000" --name network-forge
+          pm2 save
+
+      - name: Configure Nginx
+        run: |
+          sudo rm -f /etc/nginx/sites-enabled/default
+
+          sudo bash -c 'cat > /etc/nginx/sites-available/network-forge <<EOF
+          server {
+              listen 80;
+              server_name _;
+
+              location / {
+                  proxy_pass http://127.0.0.1:3000;
+                  proxy_http_version 1.1;
+                  proxy_set_header Upgrade \$http_upgrade;
+                  proxy_set_header Connection "upgrade";
+                  proxy_set_header Host \$host;
+                  proxy_cache_bypass \$http_upgrade;
+              }
+          }
+          EOF'
+
+          sudo ln -s /etc/nginx/sites-available/network-forge /etc/nginx/sites-enabled/network-forge
+          sudo nginx -t
+          sudo systemctl restart nginx
+
+      - name: Install Tailscale
+        run: |
+          curl -fsSL https://tailscale.com/install.sh | sh
+
+      - name: Connect Tailscale
+        run: |
+          sudo tailscale up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }} --hostname=ubuntu-gh-${{ github.run_id }}
+
+      - name: Show Access Information
+        run: |
+          IP=$(tailscale ip -4)
+
+          echo "========================================="
+          echo "Ubuntu Server Ready"
+          echo "SSH: ssh runner@$IP"
+          echo "User: runner"
+          echo "Password: ABdo12!@"
+          echo ""
+          echo "Website:"
+          echo "http://$IP"
+          echo "========================================="
+
+      - name: Keep Server Alive
+        run: |
+          while true; do
+            echo "Server Running..."
+            sleep 300
+          done
